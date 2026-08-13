@@ -1,134 +1,125 @@
 <!DOCTYPE html>
-<html lang="en">
+<html lang="hi">
 <head>
-  <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Movie Store</title>
-  <script src="https://telegram.org/js/telegram-web-app.js"></script>
-  <style>
-    * {
-      box-sizing: border-box;
-      margin: 0;
-      padding: 0;
-    }
-    body {
-      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
-      background-color: var(--tg-theme-bg-color, #121212);
-      color: var(--tg-theme-text-color, #ffffff);
-      padding: 12px;
-    }
-    h1 {
-      font-size: 20px;
-      margin-bottom: 15px;
-      text-align: center;
-      color: var(--tg-theme-button-color, #0088cc);
-    }
-    .grid {
-      display: grid;
-      grid-template-columns: repeat(auto-fill, minmax(140px, 1fr));
-      gap: 12px;
-    }
-    .card {
-      background: var(--tg-theme-secondary-bg-color, #1e1e1e);
-      border-radius: 10px;
-      overflow: hidden;
-      display: flex;
-      flex-direction: column;
-      justify-content: space-between;
-      border: 1px solid rgba(255, 255, 255, 0.1);
-    }
-    .card img {
-      width: 100%;
-      height: 180px;
-      object-fit: cover;
-      background: #2a2a2a;
-    }
-    .card-content {
-      padding: 8px;
-      text-align: center;
-    }
-    .card-title {
-      font-size: 13px;
-      font-weight: 600;
-      margin-bottom: 8px;
-      display: -webkit-box;
-      -webkit-line-clamp: 2;
-      -webkit-box-orient: vertical;
-      overflow: hidden;
-    }
-    .btn {
-      background-color: var(--tg-theme-button-color, #0088cc);
-      color: var(--tg-theme-button-text-color, #ffffff);
-      border: none;
-      padding: 8px 0;
-      width: 100%;
-      border-radius: 6px;
-      font-size: 12px;
-      font-weight: bold;
-      cursor: pointer;
-    }
-    .loading {
-      text-align: center;
-      padding: 40px 0;
-      font-size: 16px;
-      color: #888;
-    }
-  </style>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Movie Store</title>
+    <script src="https://telegram.org/js/telegram-web-app.js"></script>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            background-color: #121212;
+            color: #ffffff;
+            margin: 0;
+            padding: 15px;
+        }
+        h2 {
+            text-align: center;
+            color: #0088cc;
+        }
+        #loading {
+            text-align: center;
+            font-size: 18px;
+            color: #aaaaaa;
+            margin-top: 50px;
+        }
+        .movie-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fill, minmax(140px, 1fr));
+            gap: 15px;
+            margin-top: 20px;
+        }
+        .movie-card {
+            background-color: #1e1e1e;
+            border-radius: 8px;
+            overflow: hidden;
+            text-align: center;
+            padding: 10px;
+            box-shadow: 0 4px 6px rgba(0,0,0,0.3);
+            cursor: pointer;
+        }
+        .movie-card img {
+            width: 100%;
+            height: 180px;
+            object-fit: cover;
+            border-radius: 5px;
+        }
+        .movie-title {
+            font-size: 14px;
+            margin-top: 8px;
+            font-weight: bold;
+            white-space: nowrap;
+            overflow: hidden;
+            text-overflow: ellipsis;
+        }
+        .send-btn {
+            background-color: #0088cc;
+            color: white;
+            border: none;
+            padding: 8px 12px;
+            margin-top: 8px;
+            border-radius: 4px;
+            width: 100%;
+            cursor: pointer;
+        }
+    </style>
 </head>
 <body>
 
-  <h1>🎬 Movie Store</h1>
-  <div id="loading" class="loading">Loading movies...</div>
-  <div id="movieGrid" class="grid"></div>
+    <h2>🎬 Movie Store</h2>
+    <div id="loading">Loading movies...</div>
+    <div class="movie-grid" id="movieGrid"></div>
 
-  <script>
-    const tg = window.Telegram.WebApp;
-    tg.expand();
+    <script>
+        const tg = window.Telegram.WebApp;
+        tg.expand();
 
-    const API_BASE_URL = 'https://movie-zone-1bot.onrender.com';
+        // Render Backend URL
+        const BACKEND_URL = 'https://movie-zone-1bot.onrender.com';
 
-    async function loadMovies() {
-      const grid = document.getElementById('movieGrid');
-      const loading = document.getElementById('loading');
+        async function loadMovies() {
+            try {
+                const response = await fetch(`${BACKEND_URL}/api/movies`);
+                const movies = await response.json();
 
-      try {
-        const response = await fetch(${API_BASE_URL}/api/movies);
-        const movies = await response.json();
+                const loadingDiv = document.getElementById('loading');
+                const movieGrid = document.getElementById('movieGrid');
 
-        loading.style.display = 'none';
+                loadingDiv.style.display = 'none';
 
-        if (!movies || movies.length === 0) {
-          grid.innerHTML = '<p style="grid-column: 1/-1; text-align: center;">No movies available right now.</p>';
-          return;
+                if (movies.length === 0) {
+                    movieGrid.innerHTML = '<p style="text-align:center; grid-column: 1/-1;">कोई मूवी नहीं मिली!</p>';
+                    return;
+                }
+
+                movieGrid.innerHTML = '';
+                movies.forEach(movie => {
+                    const card = document.createElement('div');
+                    card.className = 'movie-card';
+
+                    const thumbUrl = movie.thumbFileId 
+                        ? `${BACKEND_URL}/api/thumb/${movie.thumbFileId}` 
+                        : 'https://via.placeholder.com/150x200?text=No+Poster';
+
+                    card.innerHTML = `
+                        <img src="${thumbUrl}" alt="Poster" onerror="this.src='https://via.placeholder.com/150x200?text=No+Poster'">
+                        <div class="movie-title" title="${movie.title}">${movie.title}</div>
+                        <button class="send-btn" onclick="sendMovie('${movie._id}')">Get Movie</button>
+                    `;
+                    movieGrid.appendChild(card);
+                });
+            } catch (err) {
+                document.getElementById('loading').innerText = 'मूवीज़ लोड करने में एरर आया!';
+                console.error('Error fetching movies:', err);
+            }
         }
 
-        grid.innerHTML = movies.map(movie => {
-          const thumbUrl = movie.thumbFileId 
-            ? ${API_BASE_URL}/api/thumb/${movie.thumbFileId}
-            : 'https://via.placeholder.com/150x200?text=No+Poster';
+        function sendMovie(movieId) {
+            tg.sendData(movieId);
+            tg.close();
+        }
 
-          return 
-            <div class="card">
-              <img src="${thumbUrl}" alt="Poster" onerror="this.src='https://via.placeholder.com/150x200?text=No+Poster'">
-              <div class="card-content">
-                <div class="card-title">${movie.title}</div>
-                <button class="btn" onclick="sendMovie('${movie._id}')">Get Movie</button>
-              </div>
-            </div>
-          ;
-        }).join('');
-
-      } catch (error) {
-        loading.innerText = 'Failed to load movies. Please try again.';
-      }
-    }
-
-    function sendMovie(movieId) {
-      tg.sendData(movieId);
-      tg.close();
-    }
-
-    loadMovies();
-  </script>
+        loadMovies();
+    </script>
 </body>
 </html>
