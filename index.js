@@ -1,17 +1,25 @@
 const TelegramBot = require('node-telegram-bot-api');
 const mongoose = require('mongoose');
+const http = require('http');
 
-// Configurations - ये सब Render Dashboard में Environment Variables में सेट करें
+// Environment Variables
 const token = process.env.BOT_TOKEN;
 const mongoURI = process.env.MONGO_URI;
 const ADMIN_ID = process.env.ADMIN_ID;
 
-// MongoDB Database Connection
+// Web Server for Render Port Check
+const port = process.env.PORT || 3000;
+http.createServer((req, res) => {
+  res.writeHead(200, { 'Content-Type': 'text/plain' });
+  res.end('Bot is running!\n');
+}).listen(port, () => console.log('Server is running on port ' + port));
+
+// MongoDB Connection
 mongoose.connect(mongoURI)
   .then(() => console.log('Database connected successfully!'))
   .catch(err => console.error('Database connection error:', err));
 
-// Define Schema for Saving User Messages
+// Schema Definition
 const MessageSchema = new mongoose.Schema({
   userId: String,
   username: String,
@@ -20,21 +28,20 @@ const MessageSchema = new mongoose.Schema({
 });
 const BotMessage = mongoose.model('BotMessage', MessageSchema);
 
-// Initialize Telegram Bot
+// Telegram Bot Setup
 const bot = new TelegramBot(token, { polling: true });
 
-// Message Handler
 bot.on('message', async (msg) => {
   const chatId = msg.chat.id;
   const userId = msg.from.id.toString();
 
-  // 1. Check if user is Admin
+  // Admin Check
   if (userId !== ADMIN_ID) {
     bot.sendMessage(chatId, "Access Restricted: You are not the admin.");
     return;
   }
 
-  // 2. Save incoming data to MongoDB
+  // Save to Database
   try {
     const userMessage = new BotMessage({
       userId: userId,
@@ -47,16 +54,10 @@ bot.on('message', async (msg) => {
     console.error("Database save error:", err);
   }
 
-  // 3. Simple Command Logic
+  // Commands
   if (msg.text === '/start') {
-    bot.sendMessage(chatId, "Welcome Admin! Your bot is fully operational and saving data.");
+    bot.sendMessage(chatId, "Welcome Admin! Your bot is fully operational.");
   }
 });
 
-console.log('Bot is running...');
-const http = require('http');
-const port = process.env.PORT || 3000;
-http.createServer((req, res) => {
-  res.writeHead(200, { 'Content-Type': 'text/plain' });
-  res.end('Bot is running!\n');
-}).listen(port, () => console.log(Server listening on port ${port}));
+console.log('Bot process initialized...');
