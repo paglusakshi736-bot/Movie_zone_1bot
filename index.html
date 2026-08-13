@@ -4,7 +4,6 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Movie Store</title>
-    <!-- Telegram WebApp SDK -->
     <script src="https://telegram.org/js/telegram-web-app.js"></script>
     <style>
         body {
@@ -14,16 +13,8 @@
             margin: 0;
             padding: 15px;
         }
-        h2 {
-            text-align: center;
-            color: #0088cc;
-        }
-        #loading {
-            text-align: center;
-            font-size: 18px;
-            color: #aaaaaa;
-            margin-top: 50px;
-        }
+        h2 { text-align: center; color: #0088cc; }
+        #loading { text-align: center; font-size: 18px; color: #aaaaaa; margin-top: 50px; }
         .movie-grid {
             display: grid;
             grid-template-columns: repeat(auto-fill, minmax(140px, 1fr));
@@ -85,7 +76,6 @@
 
                 const loadingDiv = document.getElementById('loading');
                 const movieGrid = document.getElementById('movieGrid');
-
                 loadingDiv.style.display = 'none';
 
                 if (!movies || movies.length === 0) {
@@ -111,16 +101,32 @@
                 });
             } catch (err) {
                 document.getElementById('loading').innerText = 'मूवीज़ लोड करने में एरर आया!';
-                console.error('Error fetching movies:', err);
             }
         }
 
-        function sendMovie(movieId) {
-            if (tg.sendData) {
-                tg.sendData(movieId);
-                tg.close();
-            } else {
-                alert("Telegram WebApp sendData support nahi कर रहा!");
+        async function sendMovie(movieId) {
+            const chatId = tg.initDataUnsafe?.user?.id;
+
+            if (!chatId) {
+                alert("Telegram Chat ID नहीं मिली! कृपया इसे Telegram App में खोलें।");
+                return;
+            }
+
+            try {
+                const res = await fetch(`${BACKEND_URL}/api/send-movie`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ movieId, chatId })
+                });
+
+                const data = await res.json();
+                if (data.success) {
+                    tg.close(); // Close Mini App on Success
+                } else {
+                    alert("एरर: " + (data.error || "मूवी नहीं भेजी जा सकी"));
+                }
+            } catch (err) {
+                alert("Server error: " + err.message);
             }
         }
 
@@ -128,4 +134,3 @@
     </script>
 </body>
 </html>
-
