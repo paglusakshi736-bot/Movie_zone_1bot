@@ -9,7 +9,7 @@ const ADMIN_ID = process.env.ADMIN_ID;
 const app = express();
 app.use(express.json());
 
-// Enable Manual CORS Headers (No extra package needed)
+// Enable CORS for Mini App access without external package
 app.use((req, res, next) => {
   res.header('Access-Control-Allow-Origin', '*');
   res.header('Access-Control-Allow-Headers', 'Origin, X-Requested-With, Content-Type, Accept');
@@ -46,10 +46,13 @@ app.get('/api/movies', async (req, res) => {
   }
 });
 
-// API Proxy: Telegram Thumbnail Redirect
+// API Proxy: Telegram Thumbnail Image Redirect
 app.get('/api/thumb/:fileId', async (req, res) => {
   try {
     const fId = req.params.fileId;
+    if (!fId  fId === 'null'  fId === 'undefined') {
+      return res.redirect('https://via.placeholder.com/150x200?text=No+Poster');
+    }
     const fileLink = await bot.getFileLink(fId);
     return res.redirect(fileLink);
   } catch (err) {
@@ -64,7 +67,7 @@ bot.on('message', async (msg) => {
   const chatId = msg.chat.id;
   const userId = msg.from.id.toString();
 
-  // Mini App Trigger
+  // Mini App Trigger (When user clicks Get Movie)
   if (msg.web_app_data) {
     const movieId = msg.web_app_data.data;
     try {
@@ -77,12 +80,12 @@ bot.on('message', async (msg) => {
         }
       }
     } catch (err) {
-      bot.sendMessage(chatId, 'Failed to send the requested file.');
+      bot.sendMessage(chatId, 'Failed to send requested movie.');
     }
     return;
   }
 
-  // Admin Restriction
+  // Admin Security Check
   if (userId !== ADMIN_ID) return;
 
   // File Upload Handling
