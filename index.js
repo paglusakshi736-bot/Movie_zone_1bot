@@ -44,7 +44,7 @@ app.get('/api/movies', async (req, res) => {
 // API Proxy: Convert Telegram thumbnail ID to Image Link
 app.get('/api/thumb/:fileId', async (req, res) => {
   try {
-    const fileId = req.params.fileId;
+    const { fileId } = req.params;
     if (!fileId  fileId === 'null'  fileId === 'undefined') {
       return res.redirect('https://via.placeholder.com/150x200?text=No+Poster');
     }
@@ -62,7 +62,7 @@ bot.on('message', async (msg) => {
   const chatId = msg.chat.id;
   const userId = msg.from.id.toString();
 
-  // Triggered when user requests a movie from Mini App
+  // Mini App Trigger
   if (msg.web_app_data) {
     const movieId = msg.web_app_data.data;
     try {
@@ -75,15 +75,15 @@ bot.on('message', async (msg) => {
         }
       }
     } catch (err) {
-      bot.sendMessage(chatId, "Failed to send the requested file.");
+      bot.sendMessage(chatId, 'Failed to send the requested file.');
     }
     return;
   }
 
-  // Restrict upload access strictly to Admin
+  // Admin Restriction
   if (userId !== ADMIN_ID) return;
 
-  // Auto-detect Video or Document Files
+  // File Upload Handling
   if (msg.video || msg.document) {
     const fileId = msg.video ? msg.video.file_id : msg.document.file_id;
     const fileType = msg.video ? 'video' : 'document';
@@ -99,9 +99,9 @@ bot.on('message', async (msg) => {
     try {
       const newMovie = new Movie({ title, fileId, thumbFileId, fileType });
       await newMovie.save();
-      bot.sendMessage(chatId, "✅ Movie saved to database successfully!\n\n📌 Title: " + title);
+      bot.sendMessage(chatId, '✅ Movie saved to database successfully!\n\n📌 Title: ' + title);
     } catch (err) {
-      bot.sendMessage(chatId, "❌ Error saving movie to database!");
+      bot.sendMessage(chatId, '❌ Error saving movie to database!');
     }
   }
 });
