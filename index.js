@@ -50,7 +50,7 @@ app.get('/api/movies', async (req, res) => {
 app.get('/api/thumb/:fileId', async (req, res) => {
   try {
     const fId = req.params.fileId;
-    if (!fId  fId === 'null'  fId === 'undefined') {
+    if (!fId || fId === 'null' || fId === 'undefined') {
       return res.redirect('https://via.placeholder.com/150x200?text=No+Poster');
     }
     const fileLink = await bot.getFileLink(fId);
