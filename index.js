@@ -17,7 +17,6 @@ app.use((req, res, next) => {
 
 const PORT = process.env.PORT || 10000;
 
-// Database Connection Helper
 async function ensureDbConnected() {
     if (mongoose.connection.readyState !== 1) {
         console.log("Connecting to MongoDB...");
@@ -27,7 +26,6 @@ async function ensureDbConnected() {
     }
 }
 
-// Movie Schema
 const movieSchema = new mongoose.Schema({
     title: String,
     fileId: String,
@@ -37,10 +35,8 @@ const movieSchema = new mongoose.Schema({
 });
 
 const Movie = mongoose.model('Movie', movieSchema);
-
 const bot = new TelegramBot(token, { polling: true });
 
-// API to get all movies for Mini App
 app.get('/api/movies', async (req, res) => {
     try {
         await ensureDbConnected();
@@ -51,7 +47,6 @@ app.get('/api/movies', async (req, res) => {
     }
 });
 
-// API for thumbnail images
 app.get('/api/thumb/:fileId', async (req, res) => {
     try {
         const file = await bot.getFile(req.params.fileId);
@@ -62,9 +57,30 @@ app.get('/api/thumb/:fileId', async (req, res) => {
     }
 });
 
+// NEW DIRECT API TO SEND MOVIE
+app.post('/api/send-movie', async (req, res) => {
+    const { movieId, chatId } = req.body;
+    try {
+        await ensureDbConnected();
+        const movie = await Movie.findById(movieId);
+        if (movie) {
+            if (movie.fileType === 'video') {
+                await bot.sendVideo(chatId, movie.fileId, { caption: `🎬 ${movie.title}` });
+            } else {
+                await bot.sendDocument(chatId, movie.fileId, { caption: `🎬 ${movie.title}` });
+            }
+            return res.json({ success: true });
+        } else {
+            return res.status(404).json({ error: "Movie not found" });
+        }
+    } catch (err) {
+        console.error("Error in /api/send-movie:", err);
+        return res.status(500).json({ error: err.message });
+    }
+});
+
 app.listen(PORT, () => console.log(`Server running on port ${PORT}`));
 
-// Start Command Handler
 bot.onText(/\/start/, (msg) => {
     const chatId = msg.chat.id;
     bot.sendMessage(chatId, "स्वागत है! मूवी स्टोर खोलने के लिए नीचे दिए गए बटन पर क्लिक करें:", {
@@ -81,40 +97,13 @@ bot.onText(/\/start/, (msg) => {
     });
 });
 
-// Telegram Bot Listener
 bot.on('message', async (msg) => {
     const chatId = msg.chat.id;
     const userId = msg.from ? msg.from.id.toString() : '';
 
-    // If message is /start command, ignore here
     if (msg.text && msg.text.startsWith('/start')) return;
-
-    // 1. WebApp Data Handler (When user clicks "Get Movie" in Mini App)
-    if (msg.web_app_data && msg.web_app_data.data) {
-        const movieId = msg.web_app_data.data;
-        try {
-            await ensureDbConnected();
-            const movie = await Movie.findById(movieId);
-            if (movie) {
-                if (movie.fileType === 'video') {
-                    await bot.sendVideo(chatId, movie.fileId, { caption: `🎬 ${movie.title}` });
-                } else {
-                    await bot.sendDocument(chatId, movie.fileId, { caption: `🎬 ${movie.title}` });
-                }
-            } else {
-                await bot.sendMessage(chatId, "❌ मूवी डेटाबेस में नहीं मिली!");
-            }
-        } catch (err) {
-            console.error("Error sending movie:", err);
-            await bot.sendMessage(chatId, "❌ मूवी भेजने में एरर आया: " + err.message);
-        }
-        return;
-    }
-
-    // 2. Admin Check (Only for saving forwarded movies)
     if (userId !== ADMIN_ID) return;
 
-    // Save forwarded movie/video
     const fileId = msg.video ? msg.video.file_id : (msg.document ? msg.document.file_id : null);
     const fileType = msg.video ? 'video' : 'document';
     const title = msg.caption || (msg.document ? msg.document.file_name : 'Untitled Movie');
@@ -130,10 +119,8 @@ bot.on('message', async (msg) => {
 
     try {
         await ensureDbConnected();
-
         const newMovie = new Movie({ title, fileId, thumbFileId, fileType });
         await newMovie.save();
-
         await bot.sendMessage(chatId, `✅ Movie saved to database successfully!\n\n📌 Title: ${title}`);
     } catch (err) {
         console.error("Database Save Error:", err);
