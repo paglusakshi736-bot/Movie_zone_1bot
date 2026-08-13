@@ -64,10 +64,30 @@ app.get('/api/thumb/:fileId', async (req, res) => {
 
 app.listen(PORT, () => console.log(`Server running on port ${PORT}`));
 
+// Start Command Handler
+bot.onText(/\/start/, (msg) => {
+    const chatId = msg.chat.id;
+    bot.sendMessage(chatId, "स्वागत है! मूवी स्टोर खोलने के लिए नीचे दिए गए बटन पर क्लिक करें:", {
+        reply_markup: {
+            inline_keyboard: [
+                [
+                    {
+                        text: "🎬 Open Movie Store",
+                        web_app: { url: "https://paglusakshi736-bot.github.io/movie_zone_1bot/" } // आपकी GitHub Pages URL
+                    }
+                ]
+            ]
+        }
+    });
+});
+
 // Telegram Bot Listener
 bot.on('message', async (msg) => {
     const chatId = msg.chat.id;
     const userId = msg.from ? msg.from.id.toString() : '';
+
+    // If message is /start command, ignore here (handled above)
+    if (msg.text && msg.text.startsWith('/start')) return;
 
     // 1. WebApp Data Handler (When user clicks "Get Movie" in Mini App)
     if (msg.web_app_data && msg.web_app_data.data) {
