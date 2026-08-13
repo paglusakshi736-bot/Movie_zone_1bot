@@ -73,7 +73,7 @@ bot.onText(/\/start/, (msg) => {
                 [
                     {
                         text: "🎬 Open Movie Store",
-                        web_app: { url: "https://paglusakshi736-bot.github.io/movie_zone_1bot/" } // आपकी GitHub Pages URL
+                        web_app: { url: "https://paglusakshi736-bot.github.io/Movie_zone_1bot/" }
                     }
                 ]
             ]
@@ -86,7 +86,7 @@ bot.on('message', async (msg) => {
     const chatId = msg.chat.id;
     const userId = msg.from ? msg.from.id.toString() : '';
 
-    // If message is /start command, ignore here (handled above)
+    // If message is /start command, ignore here
     if (msg.text && msg.text.startsWith('/start')) return;
 
     // 1. WebApp Data Handler (When user clicks "Get Movie" in Mini App)
