@@ -1,15 +1,20 @@
 const TelegramBot = require('node-telegram-bot-api');
 const mongoose = require('mongoose');
 const express = require('express');
-const cors = require('cors');
 
 const token = process.env.BOT_TOKEN;
 const mongoURI = process.env.MONGO_URI;
 const ADMIN_ID = process.env.ADMIN_ID;
 
 const app = express();
-app.use(cors());
 app.use(express.json());
+
+// Enable Manual CORS Headers (No extra package needed)
+app.use((req, res, next) => {
+  res.header('Access-Control-Allow-Origin', '*');
+  res.header('Access-Control-Allow-Headers', 'Origin, X-Requested-With, Content-Type, Accept');
+  next();
+});
 
 const port = process.env.PORT || 3000;
 
@@ -41,7 +46,7 @@ app.get('/api/movies', async (req, res) => {
   }
 });
 
-// API Proxy: Direct Redirect Without Complex Checks
+// API Proxy: Telegram Thumbnail Redirect
 app.get('/api/thumb/:fileId', async (req, res) => {
   try {
     const fId = req.params.fileId;
