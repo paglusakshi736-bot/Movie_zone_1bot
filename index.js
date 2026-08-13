@@ -17,13 +17,15 @@ app.use((req, res, next) => {
 
 const port = process.env.PORT || 3000;
 
-// Connect to MongoDB with 2 Minutes (120000ms) buffer timeout
-mongoose.connect(mongoURI, {
-  serverSelectionTimeoutMS: 120000, // 2 Minutes
-  bufferTimeoutMS: 120000          // 2 Minutes
-})
-.then(() => console.log('Database connected successfully!'))
-.catch(err => console.error('Database connection error:', err));
+// Helper to ensure database connection before operations
+async function ensureDbConnected() {
+  if (mongoose.connection.readyState !== 1) {
+    console.log('Connecting to MongoDB...');
+    await mongoose.connect(mongoURI, {
+      serverSelectionTimeoutMS: 10000
+    });
+  }
+}
 
 const MovieSchema = new mongoose.Schema({
   title: String,
@@ -38,6 +40,7 @@ const bot = new TelegramBot(token, { polling: true });
 
 app.get('/api/movies', async (req, res) => {
   try {
+    await ensureDbConnected();
     const movies = await Movie.find().sort({ date: -1 });
     res.json(movies);
   } catch (err) {
@@ -64,6 +67,7 @@ bot.on('message', async (msg) => {
   if (msg.web_app_data) {
     const movieId = msg.web_app_data.data;
     try {
+      await ensureDbConnected();
       const movie = await Movie.findById(movieId);
       if (movie) {
         if (movie.fileType === 'video') {
@@ -93,10 +97,8 @@ bot.on('message', async (msg) => {
     }
 
     try {
-      // Check MongoDB Connection Status before saving
-      if (mongoose.connection.readyState !== 1) {
-        throw new Error('Database connection is not ready. Current State: ' + mongoose.connection.readyState);
-      }
+      // Connect first before saving
+      await ensureDbConnected();
 
       const newMovie = new Movie({ title, fileId, thumbFileId, fileType });
       await newMovie.save();
