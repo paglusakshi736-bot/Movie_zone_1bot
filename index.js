@@ -17,6 +17,14 @@ app.use((req, res, next) => {
 
 const port = process.env.PORT || 3000;
 
+// Connect to MongoDB with 2 Minutes (120000ms) buffer timeout
+mongoose.connect(mongoURI, {
+  serverSelectionTimeoutMS: 120000, // 2 Minutes
+  bufferTimeoutMS: 120000          // 2 Minutes
+})
+.then(() => console.log('Database connected successfully!'))
+.catch(err => console.error('Database connection error:', err));
+
 const MovieSchema = new mongoose.Schema({
   title: String,
   fileId: String,
@@ -26,33 +34,14 @@ const MovieSchema = new mongoose.Schema({
 });
 const Movie = mongoose.model('Movie', MovieSchema);
 
-// Connection handling
-let isDbConnected = false;
-
-async function connectDB() {
-  if (isDbConnected) return;
-  try {
-    await mongoose.connect(mongoURI, {
-      serverSelectionTimeoutMS: 5000
-    });
-    isDbConnected = true;
-    console.log('Database connected successfully!');
-  } catch (err) {
-    console.error('Database connection error:', err);
-  }
-}
-
-connectDB();
-
 const bot = new TelegramBot(token, { polling: true });
 
 app.get('/api/movies', async (req, res) => {
   try {
-    await connectDB();
     const movies = await Movie.find().sort({ date: -1 });
     res.json(movies);
   } catch (err) {
-    res.status(500).json({ error: 'Server error' });
+    res.status(500).json({ error: 'Server error: ' + err.message });
   }
 });
 
@@ -75,7 +64,6 @@ bot.on('message', async (msg) => {
   if (msg.web_app_data) {
     const movieId = msg.web_app_data.data;
     try {
-      await connectDB();
       const movie = await Movie.findById(movieId);
       if (movie) {
         if (movie.fileType === 'video') {
@@ -85,7 +73,7 @@ bot.on('message', async (msg) => {
         }
       }
     } catch (err) {
-      bot.sendMessage(chatId, 'Failed to send requested movie.');
+      bot.sendMessage(chatId, 'Failed to send requested movie: ' + err.message);
     }
     return;
   }
@@ -105,13 +93,17 @@ bot.on('message', async (msg) => {
     }
 
     try {
-      await connectDB();
+      // Check MongoDB Connection Status before saving
+      if (mongoose.connection.readyState !== 1) {
+        throw new Error('Database connection is not ready. Current State: ' + mongoose.connection.readyState);
+      }
+
       const newMovie = new Movie({ title, fileId, thumbFileId, fileType });
       await newMovie.save();
       bot.sendMessage(chatId, '✅ Movie saved to database successfully!\n\n📌 Title: ' + title);
     } catch (err) {
       console.error("Database Save Error:", err);
-      bot.sendMessage(chatId, '❌ Error saving movie: ' + err.message);
+      bot.sendMessage(chatId, '❌ Error saving movie:\n' + err.message);
     }
   }
 });
