@@ -41,17 +41,14 @@ app.get('/api/movies', async (req, res) => {
   }
 });
 
-// API Proxy: Convert Telegram thumbnail ID to Image Link
+// API Proxy: Direct Redirect Without Complex Checks
 app.get('/api/thumb/:fileId', async (req, res) => {
   try {
-    const { fileId } = req.params;
-    if (!fileId  fileId === 'null'  fileId === 'undefined') {
-      return res.redirect('https://via.placeholder.com/150x200?text=No+Poster');
-    }
-    const fileLink = await bot.getFileLink(fileId);
-    res.redirect(fileLink);
+    const fId = req.params.fileId;
+    const fileLink = await bot.getFileLink(fId);
+    return res.redirect(fileLink);
   } catch (err) {
-    res.redirect('https://via.placeholder.com/150x200?text=No+Poster');
+    return res.redirect('https://via.placeholder.com/150x200?text=No+Poster');
   }
 });
 
