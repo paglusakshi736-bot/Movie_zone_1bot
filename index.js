@@ -9,7 +9,6 @@ const ADMIN_ID = process.env.ADMIN_ID;
 const app = express();
 app.use(express.json());
 
-// Enable CORS for Mini App access without external package
 app.use((req, res, next) => {
   res.header('Access-Control-Allow-Origin', '*');
   res.header('Access-Control-Allow-Headers', 'Origin, X-Requested-With, Content-Type, Accept');
@@ -18,7 +17,6 @@ app.use((req, res, next) => {
 
 const port = process.env.PORT || 3000;
 
-// Database Schema
 const MovieSchema = new mongoose.Schema({
   title: String,
   fileId: String,
@@ -28,17 +26,29 @@ const MovieSchema = new mongoose.Schema({
 });
 const Movie = mongoose.model('Movie', MovieSchema);
 
-// MongoDB Connection
-mongoose.connect(mongoURI)
-  .then(() => console.log('Database connected successfully!'))
-  .catch(err => console.error('Database connection error:', err));
+// Connection handling
+let isDbConnected = false;
 
-// Bot Instance
+async function connectDB() {
+  if (isDbConnected) return;
+  try {
+    await mongoose.connect(mongoURI, {
+      serverSelectionTimeoutMS: 5000
+    });
+    isDbConnected = true;
+    console.log('Database connected successfully!');
+  } catch (err) {
+    console.error('Database connection error:', err);
+  }
+}
+
+connectDB();
+
 const bot = new TelegramBot(token, { polling: true });
 
-// API: Fetch movies list for Mini App
 app.get('/api/movies', async (req, res) => {
   try {
+    await connectDB();
     const movies = await Movie.find().sort({ date: -1 });
     res.json(movies);
   } catch (err) {
@@ -46,13 +56,9 @@ app.get('/api/movies', async (req, res) => {
   }
 });
 
-// API Proxy: Telegram Thumbnail Image Redirect
 app.get('/api/thumb/:fileId', async (req, res) => {
   try {
     const fId = req.params.fileId;
-    if (!fId || fId === 'null' || fId === 'undefined') {
-      return res.redirect('https://via.placeholder.com/150x200?text=No+Poster');
-    }
     const fileLink = await bot.getFileLink(fId);
     return res.redirect(fileLink);
   } catch (err) {
@@ -62,15 +68,14 @@ app.get('/api/thumb/:fileId', async (req, res) => {
 
 app.listen(port, () => console.log('Server running on port ' + port));
 
-// Bot Message Handling
 bot.on('message', async (msg) => {
   const chatId = msg.chat.id;
   const userId = msg.from.id.toString();
 
-  // Mini App Trigger (When user clicks Get Movie)
   if (msg.web_app_data) {
     const movieId = msg.web_app_data.data;
     try {
+      await connectDB();
       const movie = await Movie.findById(movieId);
       if (movie) {
         if (movie.fileType === 'video') {
@@ -85,10 +90,8 @@ bot.on('message', async (msg) => {
     return;
   }
 
-  // Admin Security Check
   if (userId !== ADMIN_ID) return;
 
-  // File Upload Handling
   if (msg.video || msg.document) {
     const fileId = msg.video ? msg.video.file_id : msg.document.file_id;
     const fileType = msg.video ? 'video' : 'document';
@@ -102,10 +105,12 @@ bot.on('message', async (msg) => {
     }
 
     try {
+      await connectDB();
       const newMovie = new Movie({ title, fileId, thumbFileId, fileType });
       await newMovie.save();
       bot.sendMessage(chatId, '✅ Movie saved to database successfully!\n\n📌 Title: ' + title);
     } catch (err) {
+      console.error("Database Save Error:", err);
       bot.sendMessage(chatId, '❌ Error saving movie: ' + err.message);
     }
   }
