@@ -106,7 +106,7 @@ bot.on('message', async (msg) => {
       await newMovie.save();
       bot.sendMessage(chatId, '✅ Movie saved to database successfully!\n\n📌 Title: ' + title);
     } catch (err) {
-      bot.sendMessage(chatId, '❌ Error saving movie to database!');
+      bot.sendMessage(chatId, '❌ Error saving movie: ' + err.message);
     }
   }
 });
