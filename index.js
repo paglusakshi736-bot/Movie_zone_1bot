@@ -57,29 +57,52 @@ function isAdmin(userId) {
     return adminList.includes(userId.toString());
 }
 
-// ----------------- SMART CLEANER & PARSER -----------------
+// ----------------- AUTO REGISTER COMMANDS IN TELEGRAM MENU -----------------
+bot.setMyCommands([
+    { command: 'start', description: 'Open Movie Store' },
+    { command: 'stats', description: 'View bot statistics (Admin)' },
+    { command: 'manage', description: 'Multi-Select Delete movies (Admin)' },
+    { command: 'forcesub', description: 'Enable/Disable Join Lock (Admin)' },
+    { command: 'setchannel', description: 'Set Channel for Join Lock (Admin)' },
+    { command: 'setgroup', description: 'Set Group for Join Lock (Admin)' },
+    { command: 'shortener', description: 'Enable/Disable Shortener (Admin)' },
+    { command: 'setshortener', description: 'Set Shortener Domain & API (Admin)' },
+    { command: 'broadcast', description: 'Send message to all users (Admin)' }
+]).catch(err => console.error("Commands register warning:", err.message));
+
+// ----------------- SUPER SMART CLEANER & PARSER -----------------
 function parseMediaInfo(rawText) {
     if (!rawText) return { cleanTitle: 'Movie ' + new Date().toLocaleDateString('en-GB'), label: 'Standard' };
 
     let text = rawText.split('\n')[0];
 
-    let qualityMatch = text.match(/(480p|720p|1080p|2160p|4k)/i);
+    // 1. Detect Quality
+    let qualityMatch = text.match(/(480p|720p|1080p|2160p|4k|hd|sd)/i);
     let quality = qualityMatch ? qualityMatch[0].toUpperCase() : '';
 
+    // 2. Detect Codec / Audio Details
+    let codecMatch = text.match(/(hevc|x265|h\s*265|x264|h\s*264|10bit|hdr|ddp\s*5\s*1|5\s*1|2\s*0)/i);
+    let codecInfo = codecMatch ? codecMatch[0].replace(/\s+/g, '').toUpperCase() : '';
+
+    // 3. Detect Episode / Season
     let epMatch = text.match(/(s\d+\s*e\d+|season\s*\d+|ep\s*\d+|episode\s*\d+|e\d+)/i);
     let episode = epMatch ? epMatch[0].toUpperCase() : '';
 
+    // Build Label
     let labelParts = [];
     if (episode) labelParts.push(episode);
     if (quality) labelParts.push(quality);
-    let label = labelParts.length > 0 ? labelParts.join(' - ') : 'Default Quality';
+    if (codecInfo && !labelParts.includes(codecInfo)) labelParts.push(codecInfo);
+    let label = labelParts.length > 0 ? labelParts.join(' - ') : 'Standard Quality';
 
+    // 4. Aggressive Clean for Main Card Title
     let clean = text
         .replace(/\[.*?\]/g, ' ')
         .replace(/\(.*?\)/g, ' ')
-        .replace(/(https?:\/\/[^\s]+|t\.me\/[^\s]+|www\.[^\s]+|@\w+|\.(mp4|mkv|avi|mov|zip|rar))/gi, '')
-        .replace(/(480p|720p|1080p|2160p|4k|webdl|web-dl|bluray|x264|x265|hevc|h\s*264|h\s*265|aac2\s*0|aac|esub|combined|amzn|ddp5\s*1|ddp|hindi|english|korean|dubbed|paramount|official|hd|full)/gi, ' ')
-        .replace(/\b(2\s*0|5\s*1)\b/gi, ' ')
+        .replace(/(https?:\/\/[^\s]+|t\.me\/[^\s]+|www\.[^\s]+|@\w+|\.(mp4|mkv|avi|mov|zip|rar))/gi, ' ')
+        .replace(/(480p|720p|1080p|2160p|4k|webdl|web-dl|webrip|bluray|hdrip|dvdrip|predvd|hdtc)/gi, ' ')
+        .replace(/(x264|x265|hevc|h\s*264|h\s*265|avc|10bit|hdr|dv|aac2\s*0|aac|esub|sub|combined|amzn|ddp5\s*1|ddp\s*2\s*0|ddp|dd\+|hindi|english|telugu|tamil|korean|dubbed|multi|paramount|official|hd|full)/gi, ' ')
+        .replace(/\b(2\s*0|5\s*1|7\s*1)\b/gi, ' ')
         .replace(/[^\w\s]/gi, ' ')
         .replace(/\s+/g, ' ')
         .trim();
@@ -97,21 +120,52 @@ function formatBytes(bytes) {
     return (bytes / Math.pow(1024, i)).toFixed(1) + ' ' + sizes[i];
 }
 
-// ----------------- FORCE SUB CHECKER HELPER -----------------
 async function checkMemberStatus(chatIdentifier, userId) {
     if (!chatIdentifier) return true;
     try {
         const member = await bot.getChatMember(chatIdentifier, userId);
         return ['creator', 'administrator', 'member', 'restricted'].includes(member.status);
     } catch (e) {
-        console.error(`ForceSub Check Error (${chatIdentifier}):`, e.message);
-        return true; // Error hone par block na kare
+        return true;
+    }
+}
+
+// ----------------- MULTI-SELECT BULK DELETE SYSTEM -----------------
+const adminDeleteSessions = {};
+
+async function renderDeletePanel(chatId, messageId = null, selectedIds = []) {
+    await ensureDbConnected();
+    const movies = await Movie.find().sort({ updatedAt: -1 }).limit(10);
+    
+    if (movies.length === 0) {
+        if (messageId) return bot.editMessageText("डेटाबेस में कोई मूवी नहीं है।", { chat_id: chatId, message_id: messageId });
+        return bot.sendMessage(chatId, "डेटाबेस में कोई मूवी नहीं है।");
+    }
+
+    let inline_keyboard = movies.map(m => {
+        const isSelected = selectedIds.includes(m._id.toString());
+        return [{
+            text: `${isSelected ? '✅' : '⬜'} ${m.title} (${m.files ? m.files.length : 1})`,
+            callback_data: `toggle_${m._id}`
+        }];
+    });
+
+    inline_keyboard.push([
+        { text: `🗑️ Delete Selected (${selectedIds.length})`, callback_data: `confirm_bulk_del` },
+        { text: `❌ Cancel`, callback_data: `cancel_del` }
+    ]);
+
+    const text = `⚙️ *मल्टी-सेलेक्ट डिलीट पैनल*\n\nजिन मूवीज़ को हटाना है उन पर क्लिक करें (✅ टिक लगेगा), फिर नीचे *Delete Selected* दबाएं:`;
+
+    if (messageId) {
+        await bot.editMessageText(text, { chat_id: chatId, message_id: messageId, parse_mode: 'Markdown', reply_markup: { inline_keyboard } });
+    } else {
+        const sent = await bot.sendMessage(chatId, text, { parse_mode: 'Markdown', reply_markup: { inline_keyboard } });
+        adminDeleteSessions[chatId] = { messageId: sent.message_id, selected: [] };
     }
 }
 
 // ----------------- ADMIN COMMANDS -----------------
-
-// Start Command
 bot.onText(/\/start/, async (msg) => {
     try {
         await ensureDbConnected();
@@ -121,10 +175,9 @@ bot.onText(/\/start/, async (msg) => {
             { upsert: true, new: true }
         );
         bot.sendMessage(msg.chat.id, `👋 नमस्ते ${msg.from.first_name || 'दोस्त'}!\n\n🍿 हमारी Movie WebApp खोलने के लिए नीचे दिए गए बटन पर क्लिक करें।`);
-    } catch (e) { console.error(e); }
+    } catch (e) {}
 });
 
-// 1. Stats
 bot.onText(/\/stats/, async (msg) => {
     if (!isAdmin(msg.from.id)) return;
     try {
@@ -134,20 +187,17 @@ bot.onText(/\/stats/, async (msg) => {
         const allMovies = await Movie.find();
         const totalFiles = allMovies.reduce((sum, m) => sum + (m.files ? m.files.length : 0), 0);
 
-        bot.sendMessage(msg.chat.id, `📊 *लाइव स्टेटिस्टिक्स (Live Stats)*\n\n👥 *कुल यूज़र्स:* ${totalUsers}\n🎬 *कुल मूवी कार्ड्स:* ${totalMovies}\n📂 *कुल फाइल्स/एपिसोड्स:* ${totalFiles}`, { parse_mode: 'Markdown' });
+        bot.sendMessage(msg.chat.id, `📊 *लाइव स्टेटिस्टिक्स*\n\n👥 *कुल यूज़र्स:* ${totalUsers}\n🎬 *कुल मूवी कार्ड्स:* ${totalMovies}\n📂 *कुल फाइल्स:* ${totalFiles}`, { parse_mode: 'Markdown' });
     } catch (e) { bot.sendMessage(msg.chat.id, "❌ एरर: " + e.message); }
 });
 
-// 2. Broadcast
 bot.onText(/\/broadcast (.+)/, async (msg, match) => {
     if (!isAdmin(msg.from.id)) return;
     const textToSend = match[1];
-
     try {
         await ensureDbConnected();
         const users = await User.find();
         bot.sendMessage(msg.chat.id, `📢 ${users.length} यूज़र्स को ब्रॉडकास्ट भेजा जा रहा है...`);
-
         let success = 0;
         for (const u of users) {
             try {
@@ -160,46 +210,47 @@ bot.onText(/\/broadcast (.+)/, async (msg, match) => {
     } catch (e) { bot.sendMessage(msg.chat.id, "❌ एरर: " + e.message); }
 });
 
-// 3. Delete / Manage
 bot.onText(/\/manage|\/delete/, async (msg) => {
     if (!isAdmin(msg.from.id)) return;
-    try {
-        await ensureDbConnected();
-        const movies = await Movie.find().sort({ updatedAt: -1 }).limit(15);
-        if (movies.length === 0) return bot.sendMessage(msg.chat.id, "डेटाबेस में कोई मूवी नहीं है।");
-
-        let inline_keyboard = movies.map(m => ([
-            { text: `🗑️ ${m.title} (${m.files.length})`, callback_data: `del_${m._id}` }
-        ]));
-
-        await bot.sendMessage(msg.chat.id, "⚙️ *मूवी डिलीट पैनल*\nजिस मूवी को हटाना है उस पर क्लिक करें:", {
-            parse_mode: 'Markdown',
-            reply_markup: { inline_keyboard }
-        });
-    } catch (e) { bot.sendMessage(msg.chat.id, "❌ एरर: " + e.message); }
+    adminDeleteSessions[msg.chat.id] = { selected: [] };
+    await renderDeletePanel(msg.chat.id);
 });
 
 bot.on('callback_query', async (query) => {
-    if (!isAdmin(query.from.id)) return bot.answerCallbackQuery(query.id, { text: "❌ केवल एडमिन ही डिलीट कर सकते हैं!", show_alert: true });
+    const userId = query.from.id;
+    const chatId = query.message.chat.id;
+    const messageId = query.message.message_id;
+    const data = query.data;
 
-    if (query.data.startsWith('del_')) {
-        const movieId = query.data.replace('del_', '');
+    if (!isAdmin(userId)) return bot.answerCallbackQuery(query.id, { text: "❌ एक्सेस डिनाइड!", show_alert: true });
+    if (!adminDeleteSessions[chatId]) adminDeleteSessions[chatId] = { selected: [] };
+
+    if (data.startsWith('toggle_')) {
+        const movieId = data.replace('toggle_', '');
+        let list = adminDeleteSessions[chatId].selected;
+        if (list.includes(movieId)) list = list.filter(id => id !== movieId);
+        else list.push(movieId);
+        adminDeleteSessions[chatId].selected = list;
+        await renderDeletePanel(chatId, messageId, list);
+        await bot.answerCallbackQuery(query.id);
+    } else if (data === 'confirm_bulk_del') {
+        const list = adminDeleteSessions[chatId].selected;
+        if (list.length === 0) return bot.answerCallbackQuery(query.id, { text: "⚠️ कृपया पहले मूवी सेलेक्ट करें!", show_alert: true });
+
         try {
             await ensureDbConnected();
-            const deleted = await Movie.findByIdAndDelete(movieId);
-            if (deleted) {
-                await bot.answerCallbackQuery(query.id, { text: `✅ "${deleted.title}" डिलीट!` });
-                await bot.editMessageText(`✅ मूवी *"${deleted.title}"* को हटा दिया गया है।`, {
-                    chat_id: query.message.chat.id,
-                    message_id: query.message.message_id,
-                    parse_mode: 'Markdown'
-                });
-            }
-        } catch (e) { bot.answerCallbackQuery(query.id, { text: "एरर: " + e.message }); }
+            const result = await Movie.deleteMany({ _id: { $in: list } });
+            adminDeleteSessions[chatId].selected = [];
+            await bot.answerCallbackQuery(query.id, { text: `✅ ${result.deletedCount} मूवीज़ डिलीट!` });
+            await bot.editMessageText(`🗑️ *सफलता:* कुल **${result.deletedCount}** मूवीज़ डेटाबेस और ऐप से हटा दी गई हैं।`, { chat_id: chatId, message_id: messageId, parse_mode: 'Markdown' });
+        } catch (err) { bot.answerCallbackQuery(query.id, { text: "एरर: " + err.message }); }
+    } else if (data === 'cancel_del') {
+        delete adminDeleteSessions[chatId];
+        await bot.editMessageText("❌ डिलीट ऑपरेशन रद्द (Cancelled)।", { chat_id: chatId, message_id: messageId });
+        await bot.answerCallbackQuery(query.id);
     }
 });
 
-// 4. Rename
 bot.onText(/\/rename (.+)/, async (msg, match) => {
     if (!isAdmin(msg.from.id)) return;
     const parts = match[1].split('=');
@@ -217,13 +268,10 @@ bot.onText(/\/rename (.+)/, async (msg, match) => {
     } catch (e) { bot.sendMessage(msg.chat.id, "❌ एरर: " + e.message); }
 });
 
-// 5. Poster Change
 bot.on('photo', async (msg) => {
     if (!isAdmin(msg.from.id)) return;
     if (msg.caption && msg.caption.startsWith('/setposter')) {
         const movieName = msg.caption.replace('/setposter', '').trim();
-        if (!movieName) return bot.sendMessage(msg.chat.id, "⚠️ कैप्शन में लिखें: `/setposter [Movie Name]`", { parse_mode: 'Markdown' });
-
         const photoId = msg.photo[msg.photo.length - 1].file_id;
         try {
             await ensureDbConnected();
@@ -233,50 +281,46 @@ bot.on('photo', async (msg) => {
                 { new: true }
             );
             if (movie) bot.sendMessage(msg.chat.id, `✅ *"${movie.title}"* का पोस्टर बदल दिया गया!`, { parse_mode: 'Markdown' });
-            else bot.sendMessage(msg.chat.id, `❌ "${movieName}" नाम की कोई मूवी नहीं मिली।`);
+            else bot.sendMessage(msg.chat.id, `❌ मूवी नहीं मिली।`);
         } catch (e) { bot.sendMessage(msg.chat.id, "❌ एरर: " + e.message); }
     }
 });
 
-// 6. Force Subscribe Settings
 bot.onText(/\/forcesub (on|off)/i, async (msg, match) => {
     if (!isAdmin(msg.from.id)) return;
     const status = match[1].toLowerCase() === 'on';
     try {
         await ensureDbConnected();
         await Config.findOneAndUpdate({ key: 'forcesub_enabled' }, { value: status }, { upsert: true });
-        bot.sendMessage(msg.chat.id, `🔒 Force Subscribe अब *${status ? 'चालू (ON)' : 'बंद (OFF)'}* है!`, { parse_mode: 'Markdown' });
+        bot.sendMessage(msg.chat.id, `🔒 Force Sub: *${status ? 'चालू (ON)' : 'बंद (OFF)'}*`, { parse_mode: 'Markdown' });
     } catch (e) { bot.sendMessage(msg.chat.id, "❌ एरर: " + e.message); }
 });
 
 bot.onText(/\/setchannel (.+)/, async (msg, match) => {
     if (!isAdmin(msg.from.id)) return;
-    const channel = match[1].trim();
     try {
         await ensureDbConnected();
-        await Config.findOneAndUpdate({ key: 'forcesub_channel' }, { value: channel }, { upsert: true });
-        bot.sendMessage(msg.chat.id, `📢 चैनल सेट हो गया: \`${channel}\``, { parse_mode: 'Markdown' });
+        await Config.findOneAndUpdate({ key: 'forcesub_channel' }, { value: match[1].trim() }, { upsert: true });
+        bot.sendMessage(msg.chat.id, `📢 चैनल सेट: \`${match[1].trim()}\``, { parse_mode: 'Markdown' });
     } catch (e) { bot.sendMessage(msg.chat.id, "❌ एरर: " + e.message); }
 });
 
 bot.onText(/\/setgroup (.+)/, async (msg, match) => {
     if (!isAdmin(msg.from.id)) return;
-    const group = match[1].trim();
     try {
         await ensureDbConnected();
-        await Config.findOneAndUpdate({ key: 'forcesub_group' }, { value: group }, { upsert: true });
-        bot.sendMessage(msg.chat.id, `💬 डिस्कशन ग्रुप सेट हो गया: \`${group}\``, { parse_mode: 'Markdown' });
+        await Config.findOneAndUpdate({ key: 'forcesub_group' }, { value: match[1].trim() }, { upsert: true });
+        bot.sendMessage(msg.chat.id, `💬 ग्रुप सेट: \`${match[1].trim()}\``, { parse_mode: 'Markdown' });
     } catch (e) { bot.sendMessage(msg.chat.id, "❌ एरर: " + e.message); }
 });
 
-// 7. Shortener Settings
 bot.onText(/\/shortener (on|off)/i, async (msg, match) => {
     if (!isAdmin(msg.from.id)) return;
     const status = match[1].toLowerCase() === 'on';
     try {
         await ensureDbConnected();
         await Config.findOneAndUpdate({ key: 'shortener_enabled' }, { value: status }, { upsert: true });
-        bot.sendMessage(msg.chat.id, `🔗 शॉर्टनर अब *${status ? 'चालू (ON)' : 'बंद (OFF)'}* है!`, { parse_mode: 'Markdown' });
+        bot.sendMessage(msg.chat.id, `🔗 शॉर्टनर: *${status ? 'चालू (ON)' : 'बंद (OFF)'}*`, { parse_mode: 'Markdown' });
     } catch (e) { bot.sendMessage(msg.chat.id, "❌ एरर: " + e.message); }
 });
 
@@ -285,16 +329,13 @@ bot.onText(/\/setshortener (.+)/, async (msg, match) => {
     const input = match[1];
     const domainMatch = input.match(/domain=([^\s]+)/i);
     const apiMatch = input.match(/api=([^\s]+)/i);
-
-    if (!domainMatch || !apiMatch) {
-        return bot.sendMessage(msg.chat.id, "⚠️ सही तरीका:\n`/setshortener domain=gplinks.in api=YOUR_API_KEY`", { parse_mode: 'Markdown' });
-    }
+    if (!domainMatch || !apiMatch) return bot.sendMessage(msg.chat.id, "⚠️ तरीका: `/setshortener domain=gplinks.in api=YOUR_API_KEY`", { parse_mode: 'Markdown' });
 
     try {
         await ensureDbConnected();
         await Config.findOneAndUpdate({ key: 'shortener_domain' }, { value: domainMatch[1] }, { upsert: true });
         await Config.findOneAndUpdate({ key: 'shortener_api' }, { value: apiMatch[1] }, { upsert: true });
-        bot.sendMessage(msg.chat.id, `✅ *शॉर्टनर सेटिंग्स सेव हुईं!*\n\n🌐 डोमेन: \`${domainMatch[1]}\`\n🔑 API Key: \`${apiMatch[1]}\``, { parse_mode: 'Markdown' });
+        bot.sendMessage(msg.chat.id, `✅ शॉर्टनर सेटिंग्स सेव हुईं!\n\n🌐 डोमेन: \`${domainMatch[1]}\`\n🔑 API: \`${apiMatch[1]}\``, { parse_mode: 'Markdown' });
     } catch (e) { bot.sendMessage(msg.chat.id, "❌ एरर: " + e.message); }
 });
 
@@ -333,7 +374,7 @@ bot.on('message', async (msg) => {
             movie.updatedAt = new Date();
             await movie.save();
 
-            await bot.sendMessage(msg.chat.id, `✅ *मौजूदा कार्ड में जोड़ा गया!*\n\n🎬 *मूवी:* ${movie.title}\n📦 *क्वालिटी:* ${finalLabel}`, { parse_mode: 'Markdown' });
+            await bot.sendMessage(msg.chat.id, `✅ *मौजूदा कार्ड में नया वर्ज़न जोड़ा गया!*\n\n🎬 *मूवी:* ${movie.title}\n📦 *क्वालिटी:* ${finalLabel}\n📂 *कुल फाइल्स:* ${movie.files.length}`, { parse_mode: 'Markdown' });
         } else {
             movie = new Movie({
                 title: cleanTitle,
@@ -365,13 +406,11 @@ app.get('/api/thumb/:fileId', async (req, res) => {
     } catch (err) { res.status(404).send('Not Found'); }
 });
 
-// Send File (With ForceSub & Shortener Support)
 app.post('/api/send-file', async (req, res) => {
     const { fileId, fileType, movieTitle, label, chatId } = req.body;
     try {
         await ensureDbConnected();
 
-        // 1. Force Subscribe Check
         const forceSubCfg = await Config.findOne({ key: 'forcesub_enabled' });
         if (forceSubCfg && forceSubCfg.value === true) {
             const channelCfg = await Config.findOne({ key: 'forcesub_channel' });
@@ -390,7 +429,6 @@ app.post('/api/send-file', async (req, res) => {
             }
         }
 
-        // 2. Shortener Check
         const shortConfig = await Config.findOne({ key: 'shortener_enabled' });
         if (shortConfig && shortConfig.value === true) {
             const domainCfg = await Config.findOne({ key: 'shortener_domain' });
@@ -406,19 +444,16 @@ app.post('/api/send-file', async (req, res) => {
             }
         }
 
-        // 3. Direct File Delivery (10 min Auto Delete)
-        const captionText = `🎬 *${movieTitle}*\n📌 *क्वालिटी:* ${label}\n\n⚠️ *नोट:* यह फ़ाइल **10 मिनट** में अपने-आप डिलीट हो जाएगी। इसे तुरंत *Saved Messages* में फॉरवर्ड कर लें!`;
+        const captionText = `🎬 *${movieTitle}*\n📌 *क्वालिटी:* ${label}\n\n⚠️ *नोट:* यह फ़ाइल **10 मिनट** में डिलीट हो जाएगी। इसे तुरंत *Saved Messages* में फॉरवर्ड कर लें!`;
 
         let sentMsg = fileType === 'video' 
             ? await bot.sendVideo(chatId, fileId, { caption: captionText, parse_mode: 'Markdown' })
             : await bot.sendDocument(chatId, fileId, { caption: captionText, parse_mode: 'Markdown' });
 
         res.json({ success: true });
-
         setTimeout(() => bot.deleteMessage(chatId, sentMsg.message_id).catch(() => {}), 10 * 60 * 1000);
-    } catch (err) { res.status(500).json({ success: false, error: err.message }); }
+    } catch (err) { res.status(500).json({ error: err.message }); }
 });
 
 const PORT = process.env.PORT || 10000;
 app.listen(PORT, () => console.log(`Server running on port ${PORT}`));
-            
