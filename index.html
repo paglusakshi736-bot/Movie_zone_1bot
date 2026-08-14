@@ -3,276 +3,196 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Movie Store</title>
+    <title>Movie Zone</title>
     <script src="https://telegram.org/js/telegram-web-app.js"></script>
     <style>
-        * { box-sizing: border-box; margin: 0; padding: 0; }
-        body {
-            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
-            background-color: #0d0d0d;
-            color: #ffffff;
-            padding: 15px;
-        }
-        .header {
-            position: sticky;
-            top: 0;
-            background-color: #0d0d0d;
-            padding-bottom: 10px;
-            z-index: 100;
-        }
+        * { box-sizing: border-box; margin: 0; padding: 0; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; }
+        body { background: #0f1016; color: #ffffff; padding: 16px; padding-bottom: 80px; }
         
-        /* Owner Branding */
-        .brand-container { text-align: center; margin-bottom: 10px; }
-        .brand-logo {
-            width: 70px; height: 70px;
-            border-radius: 50%;
-            border: 2px solid #e50914;
-            object-fit: cover;
-            box-shadow: 0 0 12px rgba(229, 9, 20, 0.5);
-            background-color: #1a1a1a;
-        }
-        .brand-name {
-            font-size: 13px; color: #aaa;
-            letter-spacing: 2px; text-transform: uppercase; margin-top: 5px;
-            font-weight: bold;
-        }
-
-        /* Community Links (Group & Channel) */
-        .community-links {
-            display: flex; gap: 8px; margin-bottom: 12px;
-        }
-        .community-btn {
-            flex: 1; text-align: center;
-            padding: 9px; border-radius: 8px;
-            font-size: 12px; font-weight: bold;
-            text-decoration: none; color: #fff;
-            display: flex; align-items: center; justify-content: center; gap: 5px;
-        }
-        .btn-group { background-color: #0088cc; }
-        .btn-channel { background-color: #e50914; }
-        .community-btn:active { transform: scale(0.96); }
-
-        .search-container { margin-bottom: 10px; }
-        .search-input {
-            width: 100%; padding: 10px 15px;
-            background-color: #1f1f1f; border: 1px solid #333;
-            border-radius: 20px; color: #fff; font-size: 14px; outline: none;
-        }
-
-        .filter-controls { display: flex; gap: 8px; align-items: center; margin-bottom: 5px; }
-        .year-select {
-            background-color: #1f1f1f; color: #fff;
-            border: 1px solid #333; padding: 7px 10px;
-            border-radius: 15px; font-size: 12px; outline: none;
-        }
-        .category-scroll {
-            display: flex; gap: 6px; overflow-x: auto; scrollbar-width: none; flex-grow: 1;
-        }
-        .category-scroll::-webkit-scrollbar { display: none; }
-        .cat-btn {
-            background-color: #1f1f1f; color: #ccc; border: 1px solid #333;
-            padding: 6px 12px; border-radius: 15px; font-size: 12px;
-            font-weight: 600; white-space: nowrap; cursor: pointer;
-        }
-        .cat-btn.active { background-color: #e50914; color: #fff; border-color: #e50914; }
-
-        .counter { font-size: 11px; color: #888; text-align: right; margin-top: 4px; }
-        #loading { text-align: center; font-size: 16px; color: #aaa; margin-top: 40px; }
+        .header { display: flex; align-items: center; justify-content: space-between; margin-bottom: 20px; }
+        .header h1 { font-size: 22px; font-weight: 700; color: #ff334b; }
+        .search-box { width: 100%; margin-bottom: 20px; }
+        .search-box input { width: 100%; padding: 12px 16px; border-radius: 12px; border: 1px solid #282a36; background: #1a1b26; color: #fff; font-size: 14px; outline: none; }
         
-        /* Movie Cards */
-        .movie-list { display: flex; flex-direction: column; gap: 18px; margin-top: 12px; }
-        .movie-card {
-            background-color: #181818; border-radius: 12px;
-            overflow: hidden; border: 1px solid #282828; display: flex; flex-direction: column;
-        }
-        .poster-container { width: 100%; height: 320px; background-color: #222; }
-        .poster-container img { width: 100%; height: 100%; object-fit: cover; }
-        .movie-details { padding: 12px; display: flex; flex-direction: column; gap: 8px; }
-        .movie-title { font-size: 15px; font-weight: bold; color: #fff; }
-        
-        .send-btn {
-            background-color: #e50914; color: white; border: none;
-            padding: 11px; border-radius: 8px; width: 100%; cursor: pointer;
-            font-weight: bold; font-size: 14px; -webkit-tap-highlight-color: transparent;
-        }
-        .send-btn:active { transform: scale(0.97); background-color: #b80710; }
-        .send-btn:disabled { background-color: #555; }
+        .grid { display: grid; grid-template-columns: repeat(2, 1fr); gap: 14px; }
+        .card { background: #1a1b26; border-radius: 14px; overflow: hidden; border: 1px solid #282a36; display: flex; flex-direction: column; }
+        .card:active { transform: scale(0.98); }
+        .poster { width: 100%; height: 210px; object-fit: cover; background: #13141f; }
+        .card-body { padding: 10px; display: flex; flex-direction: column; flex-grow: 1; justify-content: space-between; }
+        .card-title { font-size: 13px; font-weight: 600; line-height: 1.3; margin-bottom: 8px; color: #f0f0f0; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; }
+        .badge { display: inline-block; background: rgba(255, 51, 75, 0.15); color: #ff334b; font-size: 11px; padding: 3px 8px; border-radius: 6px; font-weight: 600; margin-bottom: 8px; }
+        .btn-view { width: 100%; background: #ff334b; color: #fff; border: none; padding: 9px; border-radius: 8px; font-weight: 600; font-size: 13px; cursor: pointer; }
+
+        /* BOTTOM MODAL */
+        .modal-overlay { position: fixed; top: 0; left: 0; right: 0; bottom: 0; background: rgba(0,0,0,0.8); display: none; align-items: flex-end; justify-content: center; z-index: 100; backdrop-filter: blur(4px); }
+        .modal-sheet { background: #1a1b26; width: 100%; max-width: 500px; border-radius: 20px 20px 0 0; padding: 20px; max-height: 80vh; overflow-y: auto; }
+        .modal-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 15px; border-bottom: 1px solid #282a36; padding-bottom: 10px; }
+        .modal-title { font-size: 15px; font-weight: 700; color: #fff; }
+        .close-btn { background: none; border: none; color: #aaa; font-size: 20px; cursor: pointer; }
+
+        .quality-item { display: flex; align-items: center; justify-content: space-between; background: #222433; padding: 12px 14px; border-radius: 10px; margin-bottom: 10px; }
+        .quality-label { font-size: 13px; font-weight: 600; color: #e1e1e1; }
+        .btn-download { background: #22c55e; color: #fff; border: none; padding: 8px 14px; border-radius: 8px; font-size: 12px; font-weight: 600; cursor: pointer; }
+        .btn-download:disabled { background: #555; }
+
+        /* FORCE SUB BOX */
+        .forcesub-box { text-align: center; padding: 10px 0; }
+        .forcesub-box p { font-size: 14px; color: #ffb86c; margin-bottom: 14px; }
+        .join-btn { display: block; width: 100%; background: #0088cc; color: white; padding: 10px; border-radius: 8px; text-decoration: none; font-weight: 600; font-size: 14px; margin-bottom: 8px; }
     </style>
 </head>
 <body>
 
     <div class="header">
-        <!-- Brand Section -->
-        <div class="brand-container">
-            <!-- Your New Image Link Below -->
-            <img src="https://i.ibb.co/23Vn7YBR/1786682242346.png" alt="Logo" class="brand-logo" onerror="this.onerror=null; this.src='https://via.placeholder.com/100/e50914/ffffff?text=Asumit669';">
-            <div class="brand-name">Powered by Asumit669</div>
-        </div>
-
-        <!-- Community Links -->
-        <div class="community-links">
-            <a href="https://t.me/+DBD_fVL-Z5QwZWFl" target="_blank" class="community-btn btn-group">💬 Discussion Group</a>
-            <a href="https://t.me/+lRKSSGO-N7RkOTk9" target="_blank" class="community-btn btn-channel">📢 Backup Channel</a>
-        </div>
-
-        <!-- Search Bar -->
-        <div class="search-container">
-            <input type="text" id="searchInput" class="search-input" placeholder="🔍 Search movies..." onkeyup="applyFilters()">
-        </div>
-
-        <!-- Dropdown & Categories -->
-        <div class="filter-controls">
-            <select id="yearSelect" class="year-select" onchange="applyFilters()">
-                <option value="all">📅 All Years</option>
-                <option value="2026">2026</option>
-                <option value="2025">2025</option>
-                <option value="2024">2024</option>
-                <option value="2023">2023</option>
-                <option value="older">Older</option>
-            </select>
-
-            <div class="category-scroll">
-                <button class="cat-btn active" onclick="selectCategory('all', this)">All</button>
-                <button class="cat-btn" onclick="selectCategory('bollywood', this)">Bollywood</button>
-                <button class="cat-btn" onclick="selectCategory('hollywood', this)">Hollywood</button>
-                <button class="cat-btn" onclick="selectCategory('south', this)">South</button>
-                <button class="cat-btn" onclick="selectCategory('webseries', this)">Web Series</button>
-            </div>
-        </div>
-
-        <div class="counter" id="movieCounter">Total Movies: 0</div>
+        <h1>🍿 Movie Zone</h1>
     </div>
 
-    <div id="loading">Loading movies...</div>
-    <div class="movie-list" id="movieList"></div>
+    <div class="search-box">
+        <input type="text" id="searchInput" placeholder="मूवी या वेब सीरीज़ खोजें..." oninput="searchMovies()">
+    </div>
+
+    <div class="grid" id="movieGrid">
+        <p style="grid-column: span 2; text-align: center; color: #888;">मूवीज़ लोड हो रही हैं...</p>
+    </div>
+
+    <!-- QUALITY & FORCESUB MODAL -->
+    <div class="modal-overlay" id="qualityModal" onclick="closeModal(event)">
+        <div class="modal-sheet" onclick="event.stopPropagation()">
+            <div class="modal-header">
+                <span class="modal-title" id="modalMovieTitle">क्वालिटी चुनें</span>
+                <button class="close-btn" onclick="hideModal()">✕</button>
+            </div>
+            <div id="qualityList"></div>
+        </div>
+    </div>
 
     <script>
-        const tg = window.Telegram.WebApp;
-        tg.ready(); tg.expand();
+        const tg = window.Telegram?.WebApp;
+        if (tg) { tg.expand(); tg.ready(); }
 
         const BACKEND_URL = 'https://movie-zone-1bot.onrender.com';
-        let allMovies = []; 
-        let selectedCategory = 'all';
+        let allMovies = [];
+        const chatId = tg?.initDataUnsafe?.user?.id || new URLSearchParams(window.location.search).get('chat_id');
 
-        async function loadMovies() {
+        async function fetchMovies() {
             try {
-                const response = await fetch(`${BACKEND_URL}/api/movies`);
-                allMovies = await response.json();
-                document.getElementById('loading').style.display = 'none';
-                applyFilters();
+                const res = await fetch(`${BACKEND_URL}/api/movies`);
+                allMovies = await res.json();
+                renderMovies(allMovies);
             } catch (err) {
-                document.getElementById('loading').innerText = 'मूवीज़ लोड करने में एरर आया!';
+                document.getElementById('movieGrid').innerHTML = '<p style="grid-column: span 2; text-align: center; color: red;">मूवीज लोड नहीं हो पाईं।</p>';
             }
-        }
-
-        function detectCategory(title) {
-            const t = title.toLowerCase();
-            if (t.includes('season') || t.includes('s0') || t.includes('episode') || t.includes('ep0') || t.includes('series')) return 'webseries';
-            if (t.includes('hollywood') || t.includes('english') || t.includes('dual audio') || t.includes('multi audio')) return 'hollywood';
-            if (t.includes('south') || t.includes('telugu') || t.includes('tamil') || t.includes('kannada') || t.includes('hindi dubbed')) return 'south';
-            return 'bollywood';
-        }
-
-        function detectYear(title) {
-            const match = title.match(/\b(19\d\d|20\d\d)\b/);
-            return match ? match[0] : null;
-        }
-
-        function selectCategory(cat, btn) {
-            selectedCategory = cat;
-            document.querySelectorAll('.cat-btn').forEach(b => b.classList.remove('active'));
-            btn.classList.add('active');
-            applyFilters();
-        }
-
-        function applyFilters() {
-            const searchQuery = document.getElementById('searchInput').value.toLowerCase();
-            const selectedYear = document.getElementById('yearSelect').value;
-
-            const filtered = allMovies.filter(movie => {
-                const matchesSearch = movie.title.toLowerCase().includes(searchQuery);
-                const category = detectCategory(movie.title);
-                const matchesCategory = (selectedCategory === 'all') || (category === selectedCategory);
-
-                const movieYear = detectYear(movie.title);
-                let matchesYear = false;
-                if (selectedYear === 'all') matchesYear = true;
-                else if (selectedYear === 'older') matchesYear = movieYear && parseInt(movieYear) < 2023;
-                else matchesYear = movieYear === selectedYear;
-
-                return matchesSearch && matchesCategory && matchesYear;
-            });
-
-            renderMovies(filtered);
         }
 
         function renderMovies(movies) {
-            const movieList = document.getElementById('movieList');
-            document.getElementById('movieCounter').innerText = `Showing: ${movies.length} Movies`;
+            const grid = document.getElementById('movieGrid');
+            grid.innerHTML = '';
 
-            if (!movies || movies.length === 0) {
-                movieList.innerHTML = '<p style="text-align:center; margin-top: 30px; color: #888;">कोई मूवी नहीं मिली!</p>';
+            if (movies.length === 0) {
+                grid.innerHTML = '<p style="grid-column: span 2; text-align: center; color: #888;">कोई मूवी नहीं मिली।</p>';
                 return;
             }
 
-            movieList.innerHTML = '';
             movies.forEach(movie => {
-                const card = document.createElement('div');
-                card.className = 'movie-card';
-                const thumbUrl = movie.thumbFileId ? `${BACKEND_URL}/api/thumb/${movie.thumbFileId}` : 'https://via.placeholder.com/300x400?text=No+Poster';
+                const posterUrl = movie.thumbFileId 
+                    ? `${BACKEND_URL}/api/thumb/${movie.thumbFileId}` 
+                    : 'https://via.placeholder.com/300x450/1a1b26/ffffff?text=No+Poster';
 
+                const totalVersions = movie.files ? movie.files.length : 1;
+
+                const card = document.createElement('div');
+                card.className = 'card';
                 card.innerHTML = `
-                    <div class="poster-container">
-                        <img src="${thumbUrl}" alt="Poster" onerror="this.src='https://via.placeholder.com/300x400?text=No+Poster'">
-                    </div>
-                    <div class="movie-details">
-                        <div class="movie-title">${movie.title}</div>
-                        <button class="send-btn" id="btn-${movie._id}" onclick="sendMovie('${movie._id}')">
-                            🚀 Get Movie
-                        </button>
+                    <img class="poster" src="${posterUrl}" onerror="this.src='https://via.placeholder.com/300x450/1a1b26/ffffff?text=Poster'">
+                    <div class="card-body">
+                        <div>
+                            <span class="badge">${totalVersions} Option${totalVersions > 1 ? 's' : ''}</span>
+                            <div class="card-title">${movie.title}</div>
+                        </div>
+                        <button class="btn-view" onclick='openModal(${JSON.stringify(movie).replace(/'/g, "&apos;")})'>Get Movie</button>
                     </div>
                 `;
-                movieList.appendChild(card);
+                grid.appendChild(card);
             });
         }
 
-        async function sendMovie(movieId) {
-            const chatId = tg.initDataUnsafe?.user?.id;
-            const btn = document.getElementById(`btn-${movieId}`);
+        function openModal(movie) {
+            document.getElementById('modalMovieTitle').innerText = movie.title;
+            const qualityList = document.getElementById('qualityList');
+            qualityList.innerHTML = '';
 
+            (movie.files || []).forEach(f => {
+                const item = document.createElement('div');
+                item.className = 'quality-item';
+                item.innerHTML = `
+                    <span class="quality-label">📦 ${f.label}</span>
+                    <button class="btn-download" onclick="requestMovie('${f.fileId}', '${f.fileType}', '${movie.title.replace(/'/g, "\\'")}', '${f.label.replace(/'/g, "\\'")}', this)">Get File</button>
+                `;
+                qualityList.appendChild(item);
+            });
+
+            document.getElementById('qualityModal').style.display = 'flex';
+        }
+
+        function hideModal() { document.getElementById('qualityModal').style.display = 'none'; }
+        function closeModal(e) { if (e.target.id === 'qualityModal') hideModal(); }
+
+        async function requestMovie(fileId, fileType, movieTitle, label, btn) {
             if (!chatId) {
-                alert("Telegram Chat ID नहीं मिली!");
+                alert('कृपया बॉट के अंदर से ऐप खोलें!');
                 return;
             }
 
-            if (btn) {
-                btn.disabled = true;
-                btn.innerHTML = '⏳ Sending to Chat...';
-            }
-
-            if (tg.HapticFeedback) tg.HapticFeedback.impactOccurred('medium');
+            btn.disabled = true;
+            btn.innerText = 'चेक हो रहा है...';
 
             try {
-                const res = await fetch(`${BACKEND_URL}/api/send-movie`, {
+                const res = await fetch(`${BACKEND_URL}/api/send-file`, {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ movieId, chatId })
+                    body: JSON.stringify({ fileId, fileType, movieTitle, label, chatId })
                 });
 
                 const data = await res.json();
-                if (data.success) {
-                    tg.close();
+
+                if (res.status === 403 && data.forceSubRequired) {
+                    // Show Force Subscribe Popup
+                    document.getElementById('modalMovieTitle').innerText = '🔒 जॉइन करना ज़रूरी है';
+                    let html = '<div class="forcesub-box"><p>मूवी पाने के लिए हमारे चैनल और ग्रुप को जॉइन करें:</p>';
+                    if (data.channel) {
+                        const link = data.channel.startsWith('@') ? `https://t.me/${data.channel.replace('@','')}` : data.channel;
+                        html += `<a href="${link}" target="_blank" class="join-btn">📢 चैनल जॉइन करें</a>`;
+                    }
+                    if (data.group) {
+                        const link = data.group.startsWith('@') ? `https://t.me/${data.group.replace('@','')}` : data.group;
+                        html += `<a href="${link}" target="_blank" class="join-btn">💬 ग्रुप जॉइन करें</a>`;
+                    }
+                    html += '</div>';
+                    document.getElementById('qualityList').innerHTML = html;
+                    return;
+                }
+
+                if (res.ok) {
+                    btn.innerText = '✅ सेंड हो गई';
+                    if (tg?.showAlert) tg.showAlert('फ़ाइल आपकी चैट में भेज दी गई है!');
+                    setTimeout(() => hideModal(), 1200);
                 } else {
-                    alert("एरर: " + (data.error || "मूवी नहीं भेजी जा सकी"));
-                    if (btn) { btn.disabled = false; btn.innerHTML = '🚀 Get Movie'; }
+                    btn.innerText = '❌ एरर';
+                    btn.disabled = false;
                 }
             } catch (err) {
-                alert("Server error: " + err.message);
-                if (btn) { btn.disabled = false; btn.innerHTML = '🚀 Get Movie'; }
+                btn.innerText = '❌ एरर';
+                btn.disabled = false;
             }
         }
 
-        loadMovies();
+        function searchMovies() {
+            const query = document.getElementById('searchInput').value.toLowerCase();
+            const filtered = allMovies.filter(m => m.title.toLowerCase().includes(query));
+            renderMovies(filtered);
+        }
+
+        fetchMovies();
     </script>
 </body>
 </html>
