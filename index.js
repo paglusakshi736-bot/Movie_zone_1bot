@@ -24,50 +24,51 @@ const movieSchema = new mongoose.Schema({
 
 const Movie = mongoose.model('Movie', movieSchema);
 
-// Ensure Database Connection
 async function ensureDbConnected() {
     if (mongoose.connection.readyState !== 1) {
         await mongoose.connect(MONGO_URI);
     }
 }
 
-// ---------------- AUTO CLEANER & SAVE (ADMIN ONLY) ----------------
-bot.on('message', async (msg) => {
-    const chatId = msg.chat.id;
-    const userId = msg.from ? msg.from.id.toString() : '';
+// ----------------- FINAL CLEANER LOGIC -----------------
+function cleanTitle(text) {
+    if (!text) return 'Movie ' + new Date().toLocaleDateString('en-GB');
 
-    if (msg.text && msg.text.startsWith('/start')) return;
+    // 1. सिर्फ पहली लाइन
+    let clean = text.split('\n')[0];
+
+    // 2. ब्रैकेट्स [ ] और ( ) के अंदर का पूरा कचरा हटाओ
+    clean = clean.replace(/\[.*?\]/g, ' ').replace(/\(.*?\)/g, ' ');
+
+    // 3. लिंक्स, @हैंडल्स और फाइल एक्सटेंशन हटाओ
+    clean = clean.replace(/(https?:\/\/[^\s]+|t\.me\/[^\s]+|www\.[^\s]+|@\w+|\.(mp4|mkv|avi|mov|zip|rar))/gi, '');
+
+    // 4. सारे फालतू टैग्स और इमोजी हटाओ
+    clean = clean.replace(/(480p|720p|1080p|2160p|4k|webdl|web-dl|bluray|x264|x265|hevc|h264|h265|aac|esub|combined|amzn|ddp|hindi|english|korean|dubbed|paramount|official|official|hd|full)/gi, ' ');
     
-    // Multi-Admin Check (Supports multiple IDs separated by commas)
+    // 5. स्पेशल सिम्बल्स और इमोजी हटाओ (सिर्फ अक्षर और नंबर बचेंगे)
+    clean = clean.replace(/[^\w\s]/gi, ' ');
+
+    // 6. फालतू स्पेस हटाओ और टाइटल सुंदर बनाओ
+    clean = clean.replace(/\s+/g, ' ').trim();
+    
+    if (clean.length < 3) return 'Movie ' + new Date().toLocaleDateString('en-GB');
+    
+    return clean.split(' ').map(word => word.charAt(0).toUpperCase() + word.slice(1).toLowerCase()).join(' ');
+}
+
+// ----------------- MESSAGE HANDLER -----------------
+bot.on('message', async (msg) => {
+    const userId = msg.from ? msg.from.id.toString() : '';
     const adminList = ADMIN_ID ? ADMIN_ID.split(',').map(id => id.trim()) : [];
     if (!adminList.includes(userId)) return;
 
     const file = msg.video || msg.document;
     if (!file) return;
 
-    // 1. नाम निकालने का सबसे मजबूत तरीका (Never-Untitled Logic)
-    let rawName = msg.caption;
-
-    if (!rawName) {
-        rawName = file.file_name || null;
-    }
-
-    if (!rawName || rawName.trim() === '') {
-        rawName = 'Movie ' + new Date().toLocaleDateString('en-GB');
-    }
-
-    // 2. ऑटो क्लीनर (Links, Handles & Tags Removal)
-    let title = rawName
-        .replace(/(https?:\/\/[^\s]+|t\.me\/[^\s]+|www\.[^\s]+)/gi, '') // सारे लिंक्स हटाओ
-        .replace(/@\w+/g, '')                                           // @HANDLE वाले नाम हटाओ (जैसे @THEPARAMOUNTT)
-        .replace(/\.(mp4|mkv|avi|mov|zip|rar)$/i, '')                   // फाइल एक्सटेंशन हटाओ
-        .replace(/(480p|720p|1080p|4k|web-dl|webdl|bluray|x264|x265|hevc|aac2\.0|aac|esub|combined|amzn|h264|hindi|dubbed)/gi, '') // कचरा टैग्स हटाओ
-        .replace(/[\._-]/g, ' ')                                         // डॉट, अंडरस्कोर हटाओ
-        .replace(/\s+/g, ' ')                                           // फालतू स्पेस हटाओ
-        .trim();
-    
-    // टाइटल को सुंदर बनाओ (Capitalize)
-    title = title.replace(/\b\w/g, c => c.toUpperCase());
+    // कैप्शन या फ़ाइल नेम जो भी मिल जाए, उसे उठाओ
+    let rawInput = msg.caption || file.file_name || '';
+    let title = cleanTitle(rawInput);
 
     const fileId = file.file_id;
     const fileType = msg.video ? 'video' : 'document';
@@ -77,72 +78,40 @@ bot.on('message', async (msg) => {
         await ensureDbConnected();
         const newMovie = new Movie({ title, fileId, thumbFileId, fileType });
         await newMovie.save();
-        await bot.sendMessage(chatId, `✅ मूवी सफलता से सेव हो गई!\n\n📌 *टाइटल:* ${title}`, { parse_mode: 'Markdown' });
+        await bot.sendMessage(msg.chat.id, `✅ मूवी सेव हुई!\n\n📌 *टाइटल:* ${title}`, { parse_mode: 'Markdown' });
     } catch (err) {
-        console.error("Database Save Error:", err);
-        await bot.sendMessage(chatId, "❌ एरर: " + err.message);
+        await bot.sendMessage(msg.chat.id, "❌ एरर: " + err.message);
     }
 });
 
 // ---------------- API ENDPOINTS ----------------
-
-// Get All Movies for WebApp
 app.get('/api/movies', async (req, res) => {
     try {
         await ensureDbConnected();
         const movies = await Movie.find().sort({ createdAt: -1 });
         res.json(movies);
-    } catch (err) {
-        res.status(500).json({ error: err.message });
-    }
+    } catch (err) { res.status(500).json({ error: err.message }); }
 });
 
-// Get Thumbnail Image URL
 app.get('/api/thumb/:fileId', async (req, res) => {
     try {
         const fileLink = await bot.getFileLink(req.params.fileId);
         res.redirect(fileLink);
-    } catch (err) {
-        res.status(404).send('Thumbnail Not Found');
-    }
+    } catch (err) { res.status(404).send('Not Found'); }
 });
 
-// Send Movie to User with 10 Minutes Auto-Delete
 app.post('/api/send-movie', async (req, res) => {
     const { movieId, chatId } = req.body;
     try {
         await ensureDbConnected();
         const movie = await Movie.findById(movieId);
-        if (!movie) return res.status(404).json({ success: false, error: 'Movie not found' });
+        if (!movie) return res.status(404).json({ error: 'Movie not found' });
 
-        const captionText = `🎬 *${movie.title}*\n\n⚠️ *नोट:* यह मूवी कॉपीराइट सुरक्षा कारणों से **10 मिनट** में अपने-आप डिलीट हो जाएगी। कृपया इसे तुरंत अपने *Saved Messages* में फॉरवर्ड कर लें!`;
-
-        let sentMsg;
-        if (movie.fileType === 'video') {
-            sentMsg = await bot.sendVideo(chatId, movie.fileId, { caption: captionText, parse_mode: 'Markdown' });
-        } else {
-            sentMsg = await bot.sendDocument(chatId, movie.fileId, { caption: captionText, parse_mode: 'Markdown' });
-        }
-
+        const msg = await (movie.fileType === 'video' ? bot.sendVideo(chatId, movie.fileId, { caption: `🎬 ${movie.title}` }) : bot.sendDocument(chatId, movie.fileId, { caption: `🎬 ${movie.title}` }));
+        
         res.json({ success: true });
-
-        // --- 10 MINUTES AUTO-DELETE TIMER ---
-        setTimeout(async () => {
-            try {
-                await bot.deleteMessage(chatId, sentMsg.message_id);
-                console.log(`Message ${sentMsg.message_id} auto-deleted successfully after 10 minutes.`);
-            } catch (delErr) {
-                console.error("Auto-delete error:", delErr.message);
-            }
-        }, 10 * 60 * 1000); // 10 Minutes in milliseconds
-
-    } catch (err) {
-        console.error("Send Movie Error:", err);
-        res.status(500).json({ success: false, error: err.message });
-    }
+        setTimeout(() => bot.deleteMessage(chatId, msg.message_id).catch(() => {}), 10 * 60 * 1000);
+    } catch (err) { res.status(500).json({ error: err.message }); }
 });
 
-const PORT = process.env.PORT || 10000;
-app.listen(PORT, () => {
-    console.log(`Server running on port ${PORT}`);
-});
+app.listen(process.env.PORT || 10000);
