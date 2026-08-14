@@ -450,16 +450,21 @@
         const tg = window.Telegram?.WebApp;
         if (tg) { tg.expand(); tg.ready(); }
 
+        // ✅ आपका Render Backend Link यहाँ परमानेंट सेट कर दिया गया है
+        const BACKEND_URL = 'https://movie-zone-1bot.onrender.com';
+
         let allMovies = [];
         let currentPendingFile = null;
 
         async function fetchMovies() {
             try {
-                const res = await fetch('/api/movies');
+                const res = await fetch(`${BACKEND_URL}/api/movies`);
+                if (!res.ok) throw new Error('Network response was not ok');
                 allMovies = await res.json();
                 renderMovies(allMovies);
             } catch (err) {
-                document.getElementById('moviesContainer').innerHTML = '<div class="loader">❌ Error loading movies</div>';
+                console.error("Fetch error:", err);
+                document.getElementById('moviesContainer').innerHTML = '<div class="loader" style="color:#ff4e50"><i class="fas fa-exclamation-circle"></i> Error loading movies. Please check Backend!</div>';
             }
         }
 
@@ -472,12 +477,12 @@
 
             container.innerHTML = movies.map(m => {
                 const fileCount = m.files ? m.files.length : 1;
-                const posterUrl = m.thumbFileId ? `/api/thumb/${m.thumbFileId}` : 'https://i.ibb.co/23Vn7YBR/1786682242346.png';
+                const posterUrl = m.thumbFileId ? `${BACKEND_URL}/api/thumb/${m.thumbFileId}` : 'https://i.ibb.co/23Vn7YBR/1786682242346.png';
                 
                 return `
                     <div class="movie-card">
                         <div class="poster-box">
-                            <img src="${posterUrl}" alt="${m.title}" loading="lazy">
+                            <img src="${posterUrl}" alt="${m.title}" loading="lazy" onerror="this.src='https://i.ibb.co/23Vn7YBR/1786682242346.png'">
                             <span class="file-badge">${fileCount} Available</span>
                         </div>
                         <div class="card-details">
@@ -523,7 +528,7 @@
             currentPendingFile = { fileId, fileType, movieTitle, label };
 
             try {
-                const res = await fetch('/api/send-file', {
+                const res = await fetch(`${BACKEND_URL}/api/send-file`, {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
                     body: JSON.stringify({ fileId, fileType, movieTitle, label, chatId })
