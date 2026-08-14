@@ -33,7 +33,7 @@
             padding-bottom: 40px;
         }
 
-        /* 🔝 BRAND HEADER & LIVE TOTAL MOVIES */
+        /* 🔝 BRAND HEADER */
         .app-header {
             padding: 14px 16px;
             background: linear-gradient(180deg, rgba(255,8,68,0.12) 0%, rgba(10,12,16,0) 100%);
@@ -137,7 +137,7 @@
         .quick-btn.channel { border-color: rgba(255, 8, 68, 0.35); color: #ff5252; }
         .quick-btn.premium { border-color: rgba(255, 193, 7, 0.35); color: #ffc107; }
 
-        /* 🔍 SEARCH & YEAR DROPDOWN */
+        /* 🔍 SEARCH & YEAR */
         .search-wrapper {
             padding: 0 16px 12px;
             display: flex;
@@ -235,7 +235,7 @@
             border-color: transparent;
         }
 
-        /* 🎴 MOVIE CARDS GRID */
+        /* 🎴 MOVIE CARDS */
         .movies-grid {
             padding: 0 16px;
             display: flex;
@@ -312,7 +312,7 @@
             box-shadow: 0 4px 15px rgba(255, 8, 68, 0.35);
         }
 
-        /* 📱 BOTTOM SHEET POPUP */
+        /* 📱 BOTTOM SHEET */
         .sheet-overlay {
             position: fixed;
             top: 0; left: 0; right: 0; bottom: 0;
@@ -394,6 +394,14 @@
             display: flex;
             align-items: center;
             gap: 6px;
+            transition: 0.2s;
+        }
+
+        .dl-action-btn:disabled {
+            background: #444c5e;
+            color: #8b9bb4;
+            cursor: not-allowed;
+            box-shadow: none;
         }
 
         /* 🔒 JOIN POPUP */
@@ -441,7 +449,6 @@
             margin-top: 6px;
         }
 
-        /* 🎬 NOT FOUND & REQUEST BOX */
         .no-result-box {
             text-align: center;
             padding: 30px 16px;
@@ -475,13 +482,12 @@
 </head>
 <body>
 
-    <!-- 🔝 BRAND HEADER -->
     <header class="app-header">
         <div class="brand-container">
             <img src="https://i.ibb.co/23Vn7YBR/1786682242346.png" alt="Movie Zone Logo" class="brand-logo">
             <div class="brand-text">
                 <h1>Movie Zone</h1>
-                <div class="powered-tag" id="poweredTag">Powered by @asumit669</div>
+                <div class="powered-tag" id="poweredTag">Powered by Admin</div>
             </div>
         </div>
         <div class="header-stats-badge">
@@ -490,7 +496,6 @@
         </div>
     </header>
 
-    <!-- 🔗 3 DYNAMIC BUTTONS -->
     <div class="quick-links">
         <a id="btnDiscussion" href="#" target="_blank" class="quick-btn group">
             <i class="fab fa-telegram-plane"></i> Discussion
@@ -503,7 +508,6 @@
         </a>
     </div>
 
-    <!-- 🔍 SEARCH & YEAR DROPDOWN -->
     <div class="search-wrapper">
         <div class="search-box">
             <i class="fas fa-search"></i>
@@ -517,7 +521,6 @@
         </div>
     </div>
 
-    <!-- 🏷️ CATEGORY CHIPS -->
     <div class="filter-scroll">
         <div class="filter-chip active" onclick="applyCategoryFilter('all', this)">All</div>
         <div class="filter-chip" onclick="applyCategoryFilter('Hindi', this)">Hindi Dubbed</div>
@@ -526,12 +529,10 @@
         <div class="filter-chip" onclick="applyCategoryFilter('Hollywood', this)">Hollywood</div>
     </div>
 
-    <!-- 🎴 MOVIE LIST CONTAINER -->
     <main class="movies-grid" id="moviesContainer">
         <div class="loader"><i class="fas fa-spinner fa-spin"></i> Loading Movies...</div>
     </main>
 
-    <!-- 📱 BOTTOM SHEET POPUP -->
     <div class="sheet-overlay" id="sheetOverlay" onclick="closeSheet()"></div>
     <div class="bottom-sheet" id="bottomSheet">
         <div class="sheet-handle"></div>
@@ -539,7 +540,6 @@
         <div class="files-list" id="filesList"></div>
     </div>
 
-    <!-- 🔒 JOIN LOCK MODAL -->
     <div class="join-modal" id="joinModal">
         <h3>🔒 Access Locked</h3>
         <p>File download karne ke liye channel aur group join karna zaroori hai!</p>
@@ -606,7 +606,7 @@
             const searchVal = document.getElementById('searchInput').value.toLowerCase().trim();
 
             let filtered = allMovies.filter(m => {
-                const titleLower = m.title.toLowerCase();
+                const titleLower = (m.title || '').toLowerCase();
                 const matchesSearch = titleLower.includes(searchVal);
                 const matchesCategory = (selectedCategory === 'all') || titleLower.includes(selectedCategory.toLowerCase());
                 const matchesYear = (selectedYear === 'all') || titleLower.includes(selectedYear);
@@ -632,7 +632,7 @@
                 return;
             }
 
-            container.innerHTML = movies.map(m => {
+            container.innerHTML = movies.map((m, index) => {
                 const fileCount = m.files ? m.files.length : 1;
                 const posterUrl = m.thumbFileId ? `${BACKEND_URL}/api/thumb/${m.thumbFileId}` : 'https://i.ibb.co/23Vn7YBR/1786682242346.png';
                 
@@ -644,7 +644,7 @@
                         </div>
                         <div class="card-details">
                             <h3 class="movie-title">${m.title}</h3>
-                            <button class="get-btn" onclick='openSheet(${JSON.stringify(m).replace(/'/g, "&apos;")})'>
+                            <button class="get-btn" onclick="openSheetByIndex(${index})">
                                 <i class="fas fa-arrow-alt-circle-down"></i> Get Files (${fileCount})
                             </button>
                         </div>
@@ -653,14 +653,17 @@
             }).join('');
         }
 
-        function openSheet(movie) {
+        function openSheetByIndex(index) {
+            const movie = allMovies[index];
+            if (!movie) return;
+
             document.getElementById('sheetTitle').innerText = movie.title;
             const filesList = document.getElementById('filesList');
             
-            filesList.innerHTML = movie.files.map(f => `
+            filesList.innerHTML = (movie.files || []).map((f, fIndex) => `
                 <div class="file-item">
                     <span class="file-label">${f.label}</span>
-                    <button class="dl-action-btn" onclick='handleDownloadClick("${f.fileId}", "${f.fileType}", "${movie.title.replace(/'/g, "\\'")}", "${f.label}")'>
+                    <button id="dlBtn_${index}_${fIndex}" class="dl-action-btn" onclick="handleDownloadByIndex(${index}, ${fIndex})">
                         <i class="fas fa-download"></i> Get File
                     </button>
                 </div>
@@ -675,26 +678,42 @@
             document.getElementById('bottomSheet').classList.remove('active');
         }
 
-        async function handleDownloadClick(fileId, fileType, movieTitle, label) {
+        async function handleDownloadByIndex(movieIndex, fileIndex) {
+            const movie = allMovies[movieIndex];
+            const file = movie?.files?.[fileIndex];
+            if (!movie || !file) return;
+
+            const btn = document.getElementById(`dlBtn_${movieIndex}_${fileIndex}`);
+            if (btn) {
+                btn.disabled = true;
+                btn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Processing...';
+            }
+
+            const fileId = file.fileId;
+            const fileType = file.fileType || 'video';
+            const movieTitle = movie.title;
+            const label = file.label;
+
             if (appConfig.adgram_enabled && appConfig.adgram_block_id && window.AdController) {
                 try {
                     window.AdController.show({
                         blockId: appConfig.adgram_block_id,
-                        onComplete: () => { downloadFile(fileId, fileType, movieTitle, label); },
-                        onError: () => { downloadFile(fileId, fileType, movieTitle, label); }
+                        onComplete: () => { downloadFile(fileId, fileType, movieTitle, label, btn); },
+                        onError: () => { downloadFile(fileId, fileType, movieTitle, label, btn); }
                     });
                     return;
                 } catch (e) {
-                    downloadFile(fileId, fileType, movieTitle, label);
+                    downloadFile(fileId, fileType, movieTitle, label, btn);
                     return;
                 }
             }
-            downloadFile(fileId, fileType, movieTitle, label);
+            downloadFile(fileId, fileType, movieTitle, label, btn);
         }
 
-        async function downloadFile(fileId, fileType, movieTitle, label) {
+        async function downloadFile(fileId, fileType, movieTitle, label, btn = null) {
             const chatId = tg?.initDataUnsafe?.user?.id;
             if (!chatId) {
+                if (btn) { btn.disabled = false; btn.innerHTML = '<i class="fas fa-download"></i> Get File'; }
                 alert("Please open this app inside Telegram!");
                 return;
             }
@@ -711,16 +730,26 @@
                 const data = await res.json();
 
                 if (res.status === 403 && data.forceSubRequired) {
+                    if (btn) { btn.disabled = false; btn.innerHTML = '<i class="fas fa-download"></i> Get File'; }
                     closeSheet();
                     showJoinModal(data.channel, data.group);
                     return;
                 }
 
                 if (data.success) {
-                    closeSheet();
-                    if (tg) tg.showPopup({ title: 'Success', message: 'File sent to your Telegram chat!' });
+                    if (btn) {
+                        btn.style.background = '#00c853';
+                        btn.innerHTML = '<i class="fas fa-check-circle"></i> Sent!';
+                    }
+                    setTimeout(() => {
+                        closeSheet();
+                        if (tg) tg.showPopup({ title: 'Success', message: 'File sent to your Telegram chat!' });
+                    }, 800);
+                } else {
+                    if (btn) { btn.disabled = false; btn.innerHTML = '<i class="fas fa-download"></i> Get File'; }
                 }
             } catch (err) {
+                if (btn) { btn.disabled = false; btn.innerHTML = '<i class="fas fa-download"></i> Get File'; }
                 alert("Error sending file: " + err.message);
             }
         }
