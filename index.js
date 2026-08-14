@@ -68,9 +68,9 @@ bot.setMyCommands([
     { command: 'shortener', description: 'Enable/Disable Shortener (Admin)' },
     { command: 'setshortener', description: 'Set Shortener Domain & API (Admin)' },
     { command: 'broadcast', description: 'Send message to all users (Admin)' }
-]).catch(err => console.error("Commands register warning:", err.message));
+]).catch(() => {});
 
-// ----------------- SUPER SMART CLEANER & PARSER -----------------
+// ----------------- SUPER CLEANER (100% SINGLE CARD MERGER) -----------------
 function parseMediaInfo(rawText) {
     if (!rawText) return { cleanTitle: 'Movie ' + new Date().toLocaleDateString('en-GB'), label: 'Standard' };
 
@@ -81,8 +81,8 @@ function parseMediaInfo(rawText) {
     let quality = qualityMatch ? qualityMatch[0].toUpperCase() : '';
 
     // 2. Detect Codec / Audio Details
-    let codecMatch = text.match(/(hevc|x265|h\s*265|x264|h\s*264|10bit|hdr|ddp\s*5\s*1|5\s*1|2\s*0)/i);
-    let codecInfo = codecMatch ? codecMatch[0].replace(/\s+/g, '').toUpperCase() : '';
+    let codecMatch = text.match(/(hevc|x265|h[\s\._-]*265|x264|h[\s\._-]*264|10bit|hdr|ddp[\s\._-]*5[\s\._-]*1|5[\s\._-]*1|2[\s\._-]*0)/i);
+    let codecInfo = codecMatch ? codecMatch[0].replace(/[\s\._-]+/g, '').toUpperCase() : '';
 
     // 3. Detect Episode / Season
     let epMatch = text.match(/(s\d+\s*e\d+|season\s*\d+|ep\s*\d+|episode\s*\d+|e\d+)/i);
@@ -95,14 +95,15 @@ function parseMediaInfo(rawText) {
     if (codecInfo && !labelParts.includes(codecInfo)) labelParts.push(codecInfo);
     let label = labelParts.length > 0 ? labelParts.join(' - ') : 'Standard Quality';
 
-    // 4. Aggressive Clean for Main Card Title
+    // 4. Ultra Aggressive Clean for Main Card Title
     let clean = text
         .replace(/\[.*?\]/g, ' ')
         .replace(/\(.*?\)/g, ' ')
         .replace(/(https?:\/\/[^\s]+|t\.me\/[^\s]+|www\.[^\s]+|@\w+|\.(mp4|mkv|avi|mov|zip|rar))/gi, ' ')
-        .replace(/(480p|720p|1080p|2160p|4k|webdl|web-dl|webrip|bluray|hdrip|dvdrip|predvd|hdtc)/gi, ' ')
-        .replace(/(x264|x265|hevc|h\s*264|h\s*265|avc|10bit|hdr|dv|aac2\s*0|aac|esub|sub|combined|amzn|ddp5\s*1|ddp\s*2\s*0|ddp|dd\+|hindi|english|telugu|tamil|korean|dubbed|multi|paramount|official|hd|full)/gi, ' ')
-        .replace(/\b(2\s*0|5\s*1|7\s*1)\b/gi, ' ')
+        .replace(/(480p|720p|1080p|2160p|4k|webdl|web-dl|webrip|bluray|hdrip|dvdrip|predvd|hdtc|esub|subs?|subtitles?)/gi, ' ')
+        .replace(/(x264|x265|hevc|h[\s\._-]*264|h[\s\._-]*265|avc|10bit|hdr|dv|aac2[\s\._-]*0|aac|amzn|ddp5[\s\._-]*1|ddp2[\s\._-]*0|ddp|dd\+|hindi|english|telugu|tamil|korean|dubbed|multi|paramount|official|hd|full)/gi, ' ')
+        .replace(/\b(2[\s\._-]*0|5[\s\._-]*1|7[\s\._-]*1)\b/gi, ' ')
+        .replace(/\b265\b|\b264\b/gi, ' ')
         .replace(/[^\w\s]/gi, ' ')
         .replace(/\s+/g, ' ')
         .trim();
