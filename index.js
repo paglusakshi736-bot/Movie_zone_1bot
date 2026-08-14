@@ -45,17 +45,29 @@ bot.on('message', async (msg) => {
     const file = msg.video || msg.document;
     if (!file) return;
 
-    // Auto Name Cleaner + Link & Unwanted Tag Removal
-    let rawName = msg.caption || file.file_name || 'Untitled Movie';
-    
+    // 1. नाम निकालने का सबसे मजबूत तरीका (Never-Untitled Logic)
+    let rawName = msg.caption;
+
+    if (!rawName) {
+        rawName = file.file_name || null;
+    }
+
+    if (!rawName || rawName.trim() === '') {
+        rawName = 'Movie ' + new Date().toLocaleDateString('en-GB');
+    }
+
+    // 2. ऑटो क्लीनर (Links, Handles & Tags Removal)
     let title = rawName
-        .replace(/(https?:\/\/[^\s]+|t\.me\/[^\s]+|www\.[^\s]+)/gi, '') // Remove Links
-        .replace(/\.(mp4|mkv|avi|mov|zip|rar)$/i, '')                   // Remove Extensions
-        .replace(/[\._-]/g, ' ')                                         // Remove Underscores/Dots
-        .replace(/(720p|1080p|4k|x264|x265|hevc|web-dl|bluray)/gi, '')   // Remove Quality Tags
+        .replace(/(https?:\/\/[^\s]+|t\.me\/[^\s]+|www\.[^\s]+)/gi, '') // सारे लिंक्स हटाओ
+        .replace(/@\w+/g, '')                                           // @HANDLE वाले नाम हटाओ (जैसे @THEPARAMOUNTT)
+        .replace(/\.(mp4|mkv|avi|mov|zip|rar)$/i, '')                   // फाइल एक्सटेंशन हटाओ
+        .replace(/(480p|720p|1080p|4k|web-dl|webdl|bluray|x264|x265|hevc|aac2\.0|aac|esub|combined|amzn|h264|hindi|dubbed)/gi, '') // कचरा टैग्स हटाओ
+        .replace(/[\._-]/g, ' ')                                         // डॉट, अंडरस्कोर हटाओ
+        .replace(/\s+/g, ' ')                                           // फालतू स्पेस हटाओ
         .trim();
     
-    title = title.replace(/\b\w/g, c => c.toUpperCase()); // Capitalize first letters
+    // टाइटल को सुंदर बनाओ (Capitalize)
+    title = title.replace(/\b\w/g, c => c.toUpperCase());
 
     const fileId = file.file_id;
     const fileType = msg.video ? 'video' : 'document';
