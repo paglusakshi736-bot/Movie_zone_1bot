@@ -34,7 +34,7 @@ async function ensureDbConnected() {
 function cleanTitle(text) {
     if (!text) return 'Movie ' + new Date().toLocaleDateString('en-GB');
 
-    // 1. सिर्फ पहली लाइन
+    // 1. सिर्फ पहली लाइन उठाओ
     let clean = text.split('\n')[0];
 
     // 2. ब्रैकेट्स [ ] और ( ) के अंदर का पूरा कचरा हटाओ
@@ -43,10 +43,11 @@ function cleanTitle(text) {
     // 3. लिंक्स, @हैंडल्स और फाइल एक्सटेंशन हटाओ
     clean = clean.replace(/(https?:\/\/[^\s]+|t\.me\/[^\s]+|www\.[^\s]+|@\w+|\.(mp4|mkv|avi|mov|zip|rar))/gi, '');
 
-    // 4. सारे फालतू टैग्स और इमोजी हटाओ
-    clean = clean.replace(/(480p|720p|1080p|2160p|4k|webdl|web-dl|bluray|x264|x265|hevc|h264|h265|aac|esub|combined|amzn|ddp|hindi|english|korean|dubbed|paramount|official|official|hd|full)/gi, ' ');
+    // 4. सारे ऑडियो/वीडियो/क्वालिटी/चैनल टैग्स हटाओ
+    clean = clean.replace(/(480p|720p|1080p|2160p|4k|webdl|web-dl|bluray|x264|x265|hevc|h\s*264|h\s*265|aac2\s*0|aac|esub|combined|amzn|ddp5\s*1|ddp|hindi|english|korean|dubbed|paramount|official|hd|full)/gi, ' ');
     
-    // 5. स्पेशल सिम्बल्स और इमोजी हटाओ (सिर्फ अक्षर और नंबर बचेंगे)
+    // 5. अकेले बचे हुए 2.0 / 5.1 / 2 0 जैसे नंबर्स और सिम्बल्स हटाओ
+    clean = clean.replace(/\b(2\s*0|5\s*1)\b/gi, ' ');
     clean = clean.replace(/[^\w\s]/gi, ' ');
 
     // 6. फालतू स्पेस हटाओ और टाइटल सुंदर बनाओ
@@ -56,6 +57,8 @@ function cleanTitle(text) {
     
     return clean.split(' ').map(word => word.charAt(0).toUpperCase() + word.slice(1).toLowerCase()).join(' ');
 }
+
+
 
 // ----------------- MESSAGE HANDLER -----------------
 bot.on('message', async (msg) => {
