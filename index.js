@@ -46,13 +46,13 @@ const User = mongoose.model('User', userSchema);
 const Movie = mongoose.model('Movie', movieSchema);
 const Config = mongoose.model('Config', configSchema);
 
-// Safe Polling Error Handler (Crash Protection)
+// Safe Polling Error Handler
 bot.on('polling_error', (error) => {
     console.log('[Telegram Polling Error]:', error.message || error);
 });
 
-process.on('unhandledRejection', (reason, promise) => {
-    console.log('[Unhandled Rejection Caught]:', reason);
+process.on('unhandledRejection', (reason) => {
+    console.log('[Unhandled Rejection]:', reason);
 });
 
 function isAdmin(userId) {
@@ -79,14 +79,14 @@ function parseMediaInfo(rawText) {
     let epMatch = text.match(/(s\d+\s*e\d+|season\s*\d+|ep\s*\d+|episode\s*\d+|e\d+)/i);
     let episode = epMatch ? epMatch[0].toUpperCase() : '';
 
-    // Build Quality Label
+    // Build Label
     let labelParts = [];
     if (episode) labelParts.push(episode);
     if (quality) labelParts.push(quality);
     if (codecInfo && !labelParts.includes(codecInfo)) labelParts.push(codecInfo);
     let label = labelParts.length > 0 ? labelParts.join(' - ') : 'Standard Quality';
 
-    // 4. Ultra Aggressive Title Cleaning (Leaves only clean title & year)
+    // 4. Ultra Aggressive Title Cleaning
     let clean = text
         .replace(/\[.*?\]/g, ' ')
         .replace(/\(.*?\)/g, ' ')
@@ -438,7 +438,6 @@ mongoose.connect(MONGO_URI)
     .then(async () => {
         console.log('✅ Connected to MongoDB Successfully');
         
-        // Auto register commands silently
         bot.setMyCommands([
             { command: 'start', description: 'Open Movie Store' },
             { command: 'stats', description: 'View bot statistics' },
@@ -446,4 +445,15 @@ mongoose.connect(MONGO_URI)
             { command: 'forcesub', description: 'Enable/Disable Join Lock' },
             { command: 'setchannel', description: 'Set Channel for Join Lock' },
             { command: 'setgroup', description: 'Set Group for Join Lock' },
-            { 
+            { command: 'shortener', description: 'Enable/Disable Shortener' },
+            { command: 'setshortener', description: 'Set Shortener Domain & API' },
+            { command: 'broadcast', description: 'Send message to all users' }
+        ]).catch(() => {});
+
+        app.listen(PORT, () => {
+            console.log(`🚀 Server running on port ${PORT}`);
+        });
+    })
+    .catch((err) => {
+        console.error('❌ MongoDB Connection Error:', err.message);
+    });
