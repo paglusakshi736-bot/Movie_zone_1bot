@@ -21,6 +21,8 @@ const userSchema = new mongoose.Schema({
     firstName: String,
     referredBy: { type: String, default: null },
     referralsCount: { type: Number, default: 0 },
+    requestCredits: { type: Number, default: 0 },
+    lastRequestDate: { type: String, default: '' },
     joinedAt: { type: Date, default: Date.now }
 });
 
@@ -66,23 +68,27 @@ process.on('unhandledRejection', (reason) => {
     console.log('[Unhandled Rejection]:', reason);
 });
 
-// 🔒 STRICT ADMIN CHECK
 function isAdmin(userId) {
     if (!userId) return false;
     const adminList = ADMIN_ID ? ADMIN_ID.split(',').map(id => id.trim()) : [];
     return adminList.includes(userId.toString());
 }
 
-// ----------------- 100% SINGLE CARD TITLE CLEANER -----------------
+function getTodayDateString() {
+    const d = new Date();
+    return `${d.getFullYear()}-${d.getMonth() + 1}-${d.getDate()}`;
+}
+
+// ----------------- ADVANCED 100% CLEAN TITLE PARSER -----------------
 function parseMediaInfo(rawText) {
-    if (!rawText) return { cleanTitle: 'Movie ' + new Date().toLocaleDateString('en-GB'), cleanKey: 'movie', label: 'Standard' };
+    if (!rawText) return { cleanTitle: 'Movie ' + new Date().toLocaleDateString('en-GB'), cleanKey: 'movie', label: 'Standard Quality' };
 
     let text = rawText.split('\n')[0];
 
     let qualityMatch = text.match(/(2160p|1080p|720p|540p|480p|360p|4k|hd|sd)/i);
     let quality = qualityMatch ? qualityMatch[0].toUpperCase() : '';
 
-    let codecMatch = text.match(/(hevc|x265|h[\s\._-]*265|x264|h[\s\._-]*264|10bit|hdr|ddp[\s\._-]*5[\s\._-]*1|5[\s\._-]*1|2[\s\._-]*0)/i);
+    let codecMatch = text.match(/(hevc|x265|h[\s\._-]*265|x264|h[\s\._-]*264|10bit|hdr|ddp[\s\._-]*5[\s\._-]*1|5[\s\._-]*1|2[\s\._-]*0|aac|ds)/i);
     let codecInfo = codecMatch ? codecMatch[0].replace(/[\s\._-]+/g, '').toUpperCase() : '';
 
     let epMatch = text.match(/(s\d+\s*e\d+|season\s*\d+|ep\s*\d+|episode\s*\d+|e\d+)/i);
@@ -99,9 +105,10 @@ function parseMediaInfo(rawText) {
         .replace(/\(.*?\)/g, ' ')
         .replace(/(https?:\/\/[^\s]+|t\.me\/[^\s]+|www\.[^\s]+|@\w+)/gi, ' ')
         .replace(/\.(mp4|mkv|avi|mov|zip|rar)/gi, ' ')
-        .replace(/(2160p|1080p|720p|540p|480p|360p|4k|webdl|web-dl|webrip|bluray|hdrip|dvdrip|predvd|hdtc|esub|subs?|subtitles?)/gi, ' ')
+        .replace(/(2160p|1080p|720p|540p|480p|360p|4k|webdl|web-dl|webrip|web\s*dl|bluray|hdrip|dvdrip|predvd|hdtc|esub|subs?|subtitles?)/gi, ' ')
         .replace(/(x264|x265|hevc|h[\s\._-]*264|h[\s\._-]*265|avc|10bit|hdr|dv|aac2[\s\._-]*0|aac|amzn|ddp5[\s\._-]*1|ddp2[\s\._-]*0|ddp|dd\+|hindi|english|telugu|tamil|korean|dubbed|multi|official|hd|full|mkv)/gi, ' ')
         .replace(/\b(nf|netflix|amzn|prime|hotstar|hs|zee5|sonyliv|jiocinema|jio|mx|paramount|hulu|disney|apple|aha)\b/gi, ' ')
+        .replace(/\b(ds|es|dl|x2|x1|v2|v1)\b/gi, ' ')
         .replace(/\b(2[\s\._-]*0|5[\s\._-]*1|7[\s\._-]*1)\b/gi, ' ')
         .replace(/\b265\b|\b264\b/gi, ' ')
         .replace(/\b[a-zA-Z]\b/g, ' ')
@@ -132,7 +139,7 @@ async function checkMemberStatus(chatIdentifier, userId) {
     } catch (e) { return true; }
 }
 
-// ----------------- PAGINATED & SEARCH DELETE PANEL -----------------
+// ----------------- DELETE PANEL (WITH CLEAN ALL OPTION) -----------------
 const adminDeleteSessions = {};
 const PAGE_LIMIT = 8;
 
@@ -179,12 +186,16 @@ async function renderDeletePanel(chatId, messageId = null, page = 1, searchQuery
 
     inline_keyboard.push([
         { text: `🗑️ Delete Selected (${selectedIds.length})`, callback_data: `confirm_bulk_del` },
-        { text: `❌ Cancel`, callback_data: `cancel_del` }
+        { text: `⚠️ Clean All Data`, callback_data: `ask_clean_all` }
+    ]);
+
+    inline_keyboard.push([
+        { text: `❌ Cancel Panel`, callback_data: `cancel_del` }
     ]);
 
     let text = `⚙️ *मल्टी-सेलेक्ट डिलीट पैनल*\n`;
     if (searchQuery) text += `🔍 *सर्च फ़िल्टर:* \`${searchQuery}\`\n`;
-    text += `📊 *कुल मूवीज़:* ${totalMovies} (Page ${page}/${totalPages})\n\nमूवीज़ पर क्लिक करके टिक (✅) लगाएं, फिर नीचे *Delete Selected* दबाएं:`;
+    text += `📊 *कुल मूवीज़:* ${totalMovies} (Page ${page}/${totalPages})\n\nमूवीज़ पर टिक (✅) लगाएं, फिर *Delete Selected* दबाएं:`;
 
     if (messageId) {
         await bot.editMessageText(text, { chat_id: chatId, message_id: messageId, parse_mode: 'Markdown', reply_markup: { inline_keyboard } });
@@ -208,8 +219,12 @@ bot.onText(/\/start(?:\s+(.+))?/, async (msg, match) => {
                 const potentialRef = param.replace('ref_', '');
                 if (potentialRef !== userId) {
                     referrerId = potentialRef;
-                    await User.findOneAndUpdate({ userId: referrerId }, { $inc: { referralsCount: 1 } });
-                    bot.sendMessage(referrerId, `🎉 *बधाई हो!* आपके इनवाइट लिंक से एक नया यूज़र जुड़ा है! (+1 Refer Point)`, { parse_mode: 'Markdown' }).catch(() => {});
+                    // Give +1 referral count and +1 extra request credit to referrer
+                    await User.findOneAndUpdate(
+                        { userId: referrerId },
+                        { $inc: { referralsCount: 1, requestCredits: 1 } }
+                    );
+                    bot.sendMessage(referrerId, `🎉 *बधाई हो!* आपके इनवाइट लिंक से एक नया दोस्त जुड़ा!\n\n🎁 आपको **+1 Extra Movie Request Credit** मिल गया है!`, { parse_mode: 'Markdown' }).catch(() => {});
                 }
             }
 
@@ -222,7 +237,7 @@ bot.onText(/\/start(?:\s+(.+))?/, async (msg, match) => {
             await user.save();
         }
 
-        bot.sendMessage(msg.chat.id, `👋 नमस्ते ${msg.from.first_name || 'दोस्त'}!\n\n🍿 हमारी Movie WebApp खोलने के लिए नीचे दिए गए बटन पर क्लिक करें।\n\n📌 *मूवी माँगने के लिए:* \`/request Movie Name\`\n🎁 *अपना रेफरल लिंक देखने के लिए:* \`/refer\``, { parse_mode: 'Markdown' });
+        bot.sendMessage(msg.chat.id, `👋 नमस्ते ${msg.from.first_name || 'दोस्त'}!\n\n🍿 हमारी Movie WebApp खोलने के लिए नीचे दिए गए बटन पर क्लिक करें।\n\n📌 *मूवी माँगने के लिए:* \`/request Movie Name\`\n🎁 *अपना इनवाइट लिंक & क्रेडिट्स:* \`/refer\``, { parse_mode: 'Markdown' });
     } catch (e) {}
 });
 
@@ -232,22 +247,47 @@ bot.onText(/\/refer/, async (msg) => {
         const me = await bot.getMe();
         const user = await User.findOne({ userId });
         const refCount = user ? (user.referralsCount || 0) : 0;
+        const credits = user ? (user.requestCredits || 0) : 0;
         const refLink = `https://t.me/${me.username}?start=ref_${userId}`;
 
-        bot.sendMessage(msg.chat.id, `🎁 *आपका रेफरल डैशबोर्ड*\n\n👥 *कुल रेफरल्स:* ${refCount} लोग\n🔗 *आपका इनवाइट लिंक:*\n\`${refLink}\`\n\n*(इस लिंक को अपने दोस्तों और ग्रुप्स में शेयर करें!)*`, { parse_mode: 'Markdown' });
+        bot.sendMessage(msg.chat.id, `🎁 *आपका रेफरल डैशबोर्ड*\n\n👥 *कुल रेफरल्स:* ${refCount} दोस्त\n🎫 *एक्स्ट्रा रिक्वेस्ट क्रेडिट्स:* ${credits}\n\n🔗 *आपका इनवाइट लिंक:*\n\`${refLink}\`\n\n*(1 रेफर = 1 एक्स्ट्रा मूवी रिक्वेस्ट अनलॉक!)*`, { parse_mode: 'Markdown' });
     } catch (e) { bot.sendMessage(msg.chat.id, "❌ एरर: " + e.message); }
 });
 
+// 🎬 Smart Request with 1 Daily Free + 1 Refer = 1 Request Logic
 bot.onText(/\/request (.+)/, async (msg, match) => {
     const movieReqName = match[1].trim();
     const userId = msg.from.id.toString();
     const username = msg.from.username ? `@${msg.from.username}` : (msg.from.first_name || 'User');
+    const today = getTodayDateString();
 
     try {
+        let user = await User.findOne({ userId });
+        if (!user) {
+            user = new User({ userId, username: msg.from.username || '', firstName: msg.from.first_name || '' });
+            await user.save();
+        }
+
+        const me = await bot.getMe();
+        const refLink = `https://t.me/${me.username}?start=ref_${userId}`;
+
+        // Check Daily Free Limit & Credits
+        if (user.lastRequestDate === today) {
+            if (user.requestCredits <= 0) {
+                return bot.sendMessage(msg.chat.id, `⚠️ *आपकी आज की 1 फ़्री रिक्वेस्ट पूरी हो चुकी है!*\n\n🎁 आज और मूवी रिक्वेस्ट करने के लिए अपने **1 दोस्त को रेफर करें**:\n🔗 \`${refLink}\`\n\n*(जैसे ही आपका 1 दोस्त जुड़ेगा, आपको +1 रिक्वेस्ट तुरंत मिल जाएगी!)*`, { parse_mode: 'Markdown' });
+            } else {
+                user.requestCredits -= 1;
+            }
+        } else {
+            user.lastRequestDate = today;
+        }
+
+        await user.save();
+
         const newReq = new MovieRequest({ userId, username, movieName: movieReqName });
         await newReq.save();
 
-        bot.sendMessage(msg.chat.id, `✅ आपकी रिक्वेस्ट *"${movieReqName}"* एडमिन को भेज दी गई है! जैसे ही मूवी अपलोड होगी, आपको मैसेज मिल जाएगा।`, { parse_mode: 'Markdown' });
+        bot.sendMessage(msg.chat.id, `✅ आपकी रिक्वेस्ट *"${movieReqName}"* एडमिन को भेज दी गई है! जैसे ही मूवी आएगी, आपको नोटिफिकेशन मिल जाएगा।`, { parse_mode: 'Markdown' });
 
         const adminList = ADMIN_ID ? ADMIN_ID.split(',').map(id => id.trim()) : [];
         for (const admin of adminList) {
@@ -261,15 +301,17 @@ bot.onText(/\/request (.+)/, async (msg, match) => {
                 }
             }).catch(() => {});
         }
-    } catch (e) { bot.sendMessage(msg.chat.id, "❌ एरर: " + e.message); }
+    } catch (e) {
+        bot.sendMessage(msg.chat.id, "❌ एरर: " + e.message);
+    }
 });
 
-// ----------------- STRICT ADMIN COMMANDS ONLY -----------------
+// ----------------- ADMIN COMMANDS -----------------
 bot.onText(/\/topref/, async (msg) => {
-    if (!isAdmin(msg.from.id)) return bot.sendMessage(msg.chat.id, "❌ Access Denied! Admin Only.");
+    if (!isAdmin(msg.from.id)) return bot.sendMessage(msg.chat.id, "❌ Access Denied!");
     try {
         const topUsers = await User.find({ referralsCount: { $gt: 0 } }).sort({ referralsCount: -1 }).limit(10);
-        if (topUsers.length === 0) return bot.sendMessage(msg.chat.id, "📊 अभी तक किसी यूज़र ने रेफर नहीं किया है।");
+        if (topUsers.length === 0) return bot.sendMessage(msg.chat.id, "📊 अभी तक कोई रेफरल नहीं हुआ है।");
 
         let text = `🏆 *टॉप 10 रेफरल लीडरबोर्ड:*\n\n`;
         topUsers.forEach((u, i) => {
@@ -281,33 +323,36 @@ bot.onText(/\/topref/, async (msg) => {
 });
 
 bot.onText(/\/setbtn_group (.+)/, async (msg, match) => {
-    if (!isAdmin(msg.from.id)) return bot.sendMessage(msg.chat.id, "❌ Access Denied! Admin Only.");
+    if (!isAdmin(msg.from.id)) return bot.sendMessage(msg.chat.id, "❌ Access Denied!");
     try {
         await Config.findOneAndUpdate({ key: 'btn_group_link' }, { value: match[1].trim() }, { upsert: true });
-        bot.sendMessage(msg.chat.id, `✅ *Discussion Button लिंक सेट:* \`${match[1].trim()}\``, { parse_mode: 'Markdown' });
+        bot.sendMessage(msg.chat.id, `✅ *Discussion Button सेट:* \`${match[1].trim()}\``, { parse_mode: 'Markdown' });
     } catch (e) { bot.sendMessage(msg.chat.id, "❌ एरर: " + e.message); }
 });
 
 bot.onText(/\/setbtn_backup (.+)/, async (msg, match) => {
-    if (!isAdmin(msg.from.id)) return bot.sendMessage(msg.chat.id, "❌ Access Denied! Admin Only.");
+    if (!isAdmin(msg.from.id)) return bot.sendMessage(msg.chat.id, "❌ Access Denied!");
     try {
         await Config.findOneAndUpdate({ key: 'btn_backup_link' }, { value: match[1].trim() }, { upsert: true });
-        bot.sendMessage(msg.chat.id, `✅ *Backup Button लिंक सेट:* \`${match[1].trim()}\``, { parse_mode: 'Markdown' });
+        bot.sendMessage(msg.chat.id, `✅ *Backup Button सेट:* \`${match[1].trim()}\``, { parse_mode: 'Markdown' });
     } catch (e) { bot.sendMessage(msg.chat.id, "❌ एरर: " + e.message); }
 });
 
 bot.onText(/\/setbtn_premium (.+)/, async (msg, match) => {
-    if (!isAdmin(msg.from.id)) return bot.sendMessage(msg.chat.id, "❌ Access Denied! Admin Only.");
+    if (!isAdmin(msg.from.id)) return bot.sendMessage(msg.chat.id, "❌ Access Denied!");
     try {
         await Config.findOneAndUpdate({ key: 'btn_premium_link' }, { value: match[1].trim() }, { upsert: true });
-        bot.sendMessage(msg.chat.id, `✅ *Premium Button लिंक सेट:* \`${match[1].trim()}\``, { parse_mode: 'Markdown' });
+        bot.sendMessage(msg.chat.id, `✅ *Premium Button सेट:* \`${match[1].trim()}\``, { parse_mode: 'Markdown' });
     } catch (e) { bot.sendMessage(msg.chat.id, "❌ एरर: " + e.message); }
 });
 
 bot.onText(/\/setpowered (.+)/, async (msg, match) => {
-    if (!isAdmin(msg.from.id)) return bot.sendMessage(msg.chat.id, "❌ Access Denied! Admin Only.");
-    const newText = match[1].trim();
-    const finalTag = newText.toLowerCase().startsWith('powered by') ? newText : `Powered by ${newText}`;
+    if (!isAdmin(msg.from.id)) return bot.sendMessage(msg.chat.id, "❌ Access Denied!");
+    let newText = match[1].trim();
+    if (newText.toLowerCase().startsWith('powered by')) {
+        newText = newText.replace(/^powered\s+by\s*/i, '');
+    }
+    const finalTag = `Powered by ${newText}`;
     try {
         await Config.findOneAndUpdate({ key: 'powered_by_text' }, { value: finalTag }, { upsert: true });
         bot.sendMessage(msg.chat.id, `✅ *Powered By टेक्स्ट सेट:* \`${finalTag}\``, { parse_mode: 'Markdown' });
@@ -315,7 +360,7 @@ bot.onText(/\/setpowered (.+)/, async (msg, match) => {
 });
 
 bot.onText(/\/setcaptionlink (.+)/, async (msg, match) => {
-    if (!isAdmin(msg.from.id)) return bot.sendMessage(msg.chat.id, "❌ Access Denied! Admin Only.");
+    if (!isAdmin(msg.from.id)) return bot.sendMessage(msg.chat.id, "❌ Access Denied!");
     try {
         await Config.findOneAndUpdate({ key: 'caption_channel_link' }, { value: match[1].trim() }, { upsert: true });
         bot.sendMessage(msg.chat.id, `✅ *मूवी हाइपरलिंक चैनल सेट:* \`${match[1].trim()}\``, { parse_mode: 'Markdown' });
@@ -323,7 +368,7 @@ bot.onText(/\/setcaptionlink (.+)/, async (msg, match) => {
 });
 
 bot.onText(/\/setinvitelink (.+)/, async (msg, match) => {
-    if (!isAdmin(msg.from.id)) return bot.sendMessage(msg.chat.id, "❌ Access Denied! Admin Only.");
+    if (!isAdmin(msg.from.id)) return bot.sendMessage(msg.chat.id, "❌ Access Denied!");
     try {
         await Config.findOneAndUpdate({ key: 'caption_invite_link' }, { value: match[1].trim() }, { upsert: true });
         bot.sendMessage(msg.chat.id, `✅ *Invite Line लिंक सेट:* \`${match[1].trim()}\``, { parse_mode: 'Markdown' });
@@ -331,7 +376,7 @@ bot.onText(/\/setinvitelink (.+)/, async (msg, match) => {
 });
 
 bot.onText(/\/adgram (on|off)/i, async (msg, match) => {
-    if (!isAdmin(msg.from.id)) return bot.sendMessage(msg.chat.id, "❌ Access Denied! Admin Only.");
+    if (!isAdmin(msg.from.id)) return bot.sendMessage(msg.chat.id, "❌ Access Denied!");
     const status = match[1].toLowerCase() === 'on';
     try {
         await Config.findOneAndUpdate({ key: 'adgram_enabled' }, { value: status }, { upsert: true });
@@ -340,7 +385,7 @@ bot.onText(/\/adgram (on|off)/i, async (msg, match) => {
 });
 
 bot.onText(/\/setadgram (.+)/, async (msg, match) => {
-    if (!isAdmin(msg.from.id)) return bot.sendMessage(msg.chat.id, "❌ Access Denied! Admin Only.");
+    if (!isAdmin(msg.from.id)) return bot.sendMessage(msg.chat.id, "❌ Access Denied!");
     try {
         await Config.findOneAndUpdate({ key: 'adgram_block_id' }, { value: match[1].trim() }, { upsert: true });
         bot.sendMessage(msg.chat.id, `✅ AdGram Block ID सेट: \`${match[1].trim()}\``, { parse_mode: 'Markdown' });
@@ -348,7 +393,7 @@ bot.onText(/\/setadgram (.+)/, async (msg, match) => {
 });
 
 bot.onText(/\/shortener (on|off)/i, async (msg, match) => {
-    if (!isAdmin(msg.from.id)) return bot.sendMessage(msg.chat.id, "❌ Access Denied! Admin Only.");
+    if (!isAdmin(msg.from.id)) return bot.sendMessage(msg.chat.id, "❌ Access Denied!");
     const status = match[1].toLowerCase() === 'on';
     try {
         await Config.findOneAndUpdate({ key: 'shortener_enabled' }, { value: status }, { upsert: true });
@@ -357,7 +402,7 @@ bot.onText(/\/shortener (on|off)/i, async (msg, match) => {
 });
 
 bot.onText(/\/setshortener (.+)/, async (msg, match) => {
-    if (!isAdmin(msg.from.id)) return bot.sendMessage(msg.chat.id, "❌ Access Denied! Admin Only.");
+    if (!isAdmin(msg.from.id)) return bot.sendMessage(msg.chat.id, "❌ Access Denied!");
     const input = match[1];
     const domainMatch = input.match(/domain=([^\s]+)/i);
     const apiMatch = input.match(/api=([^\s]+)/i);
@@ -371,7 +416,7 @@ bot.onText(/\/setshortener (.+)/, async (msg, match) => {
 });
 
 bot.onText(/\/forcesub (on|off)/i, async (msg, match) => {
-    if (!isAdmin(msg.from.id)) return bot.sendMessage(msg.chat.id, "❌ Access Denied! Admin Only.");
+    if (!isAdmin(msg.from.id)) return bot.sendMessage(msg.chat.id, "❌ Access Denied!");
     const status = match[1].toLowerCase() === 'on';
     try {
         await Config.findOneAndUpdate({ key: 'forcesub_enabled' }, { value: status }, { upsert: true });
@@ -380,7 +425,7 @@ bot.onText(/\/forcesub (on|off)/i, async (msg, match) => {
 });
 
 bot.onText(/\/setchannel (.+)/, async (msg, match) => {
-    if (!isAdmin(msg.from.id)) return bot.sendMessage(msg.chat.id, "❌ Access Denied! Admin Only.");
+    if (!isAdmin(msg.from.id)) return bot.sendMessage(msg.chat.id, "❌ Access Denied!");
     try {
         await Config.findOneAndUpdate({ key: 'forcesub_channel' }, { value: match[1].trim() }, { upsert: true });
         bot.sendMessage(msg.chat.id, `📢 चैनल सेट: \`${match[1].trim()}\``, { parse_mode: 'Markdown' });
@@ -388,7 +433,7 @@ bot.onText(/\/setchannel (.+)/, async (msg, match) => {
 });
 
 bot.onText(/\/setgroup (.+)/, async (msg, match) => {
-    if (!isAdmin(msg.from.id)) return bot.sendMessage(msg.chat.id, "❌ Access Denied! Admin Only.");
+    if (!isAdmin(msg.from.id)) return bot.sendMessage(msg.chat.id, "❌ Access Denied!");
     try {
         await Config.findOneAndUpdate({ key: 'forcesub_group' }, { value: match[1].trim() }, { upsert: true });
         bot.sendMessage(msg.chat.id, `💬 ग्रुप सेट: \`${match[1].trim()}\``, { parse_mode: 'Markdown' });
@@ -396,7 +441,7 @@ bot.onText(/\/setgroup (.+)/, async (msg, match) => {
 });
 
 bot.onText(/\/stats/, async (msg) => {
-    if (!isAdmin(msg.from.id)) return bot.sendMessage(msg.chat.id, "❌ Access Denied! Admin Only.");
+    if (!isAdmin(msg.from.id)) return bot.sendMessage(msg.chat.id, "❌ Access Denied!");
     try {
         const totalUsers = await User.countDocuments();
         const totalMovies = await Movie.countDocuments();
@@ -407,7 +452,7 @@ bot.onText(/\/stats/, async (msg) => {
 });
 
 bot.onText(/\/broadcast (.+)/, async (msg, match) => {
-    if (!isAdmin(msg.from.id)) return bot.sendMessage(msg.chat.id, "❌ Access Denied! Admin Only.");
+    if (!isAdmin(msg.from.id)) return bot.sendMessage(msg.chat.id, "❌ Access Denied!");
     const textToSend = match[1];
     try {
         const users = await User.find();
@@ -425,7 +470,7 @@ bot.onText(/\/broadcast (.+)/, async (msg, match) => {
 });
 
 bot.onText(/\/(manage|delete)(?:\s+(.+))?/, async (msg, match) => {
-    if (!isAdmin(msg.from.id)) return bot.sendMessage(msg.chat.id, "❌ Access Denied! Admin Only.");
+    if (!isAdmin(msg.from.id)) return bot.sendMessage(msg.chat.id, "❌ Access Denied!");
     const searchQuery = match[2] ? match[2].trim() : '';
     adminDeleteSessions[msg.chat.id] = { selected: [], page: 1, searchQuery };
     await renderDeletePanel(msg.chat.id, null, 1, searchQuery);
@@ -444,7 +489,7 @@ bot.on('callback_query', async (query) => {
         if (reqDoc) {
             reqDoc.status = 'Uploaded';
             await reqDoc.save();
-            bot.sendMessage(reqDoc.userId, `🎉 *आपकी रिक्वेस्ट पूरी हो गई!*\n\nमूवी *"${reqDoc.movieName}"* अब Movie Zone Mini App पर उपलब्ध है! अभी जाकर डाउनलोड करें। 🍿`, { parse_mode: 'Markdown' }).catch(() => {});
+            bot.sendMessage(reqDoc.userId, `🎉 *आपकी रिक्वेस्ट पूरी हो गई!*\n\nमूवी *"${reqDoc.movieName}"* अब Movie Zone App पर उपलब्ध है! 🍿`, { parse_mode: 'Markdown' }).catch(() => {});
             bot.editMessageText(`✅ *Uploaded & Notified:*\n🎬 ${reqDoc.movieName} for ${reqDoc.username}`, { chat_id: chatId, message_id: messageId, parse_mode: 'Markdown' });
         }
         return bot.answerCallbackQuery(query.id);
@@ -489,6 +534,31 @@ bot.on('callback_query', async (query) => {
         } catch (err) {
             bot.answerCallbackQuery(query.id, { text: "एरर: " + err.message });
         }
+    } else if (data === 'ask_clean_all') {
+        const confirmKeyboard = {
+            inline_keyboard: [
+                [
+                    { text: '⚠️ Yes, Delete All Movies', callback_data: 'clean_all_execute' },
+                    { text: '❌ No, Cancel', callback_data: 'cancel_del' }
+                ]
+            ]
+        };
+        await bot.editMessageText(`⚠️ *चेतावनी (Warning):*\n\nक्या आप सच में डेटाबेस की **सारी मूवीज़ डिलीट (Wipe Out)** करना चाहते हैं?\nयह ऑपरेशन वापस नहीं लाया जा सकता!`, {
+            chat_id: chatId,
+            message_id: messageId,
+            parse_mode: 'Markdown',
+            reply_markup: confirmKeyboard
+        });
+        await bot.answerCallbackQuery(query.id);
+    } else if (data === 'clean_all_execute') {
+        try {
+            const result = await Movie.deleteMany({});
+            session.selected = [];
+            await bot.answerCallbackQuery(query.id, { text: `✅ पूरा डेटा साफ़ कर दिया गया!` });
+            await bot.editMessageText(`🧹 *डेटाबेस क्लीन:* कुल **${result.deletedCount}** मूवीज़ पूरी तरह डिलीट कर दी गईं।`, { chat_id: chatId, message_id: messageId, parse_mode: 'Markdown' });
+        } catch (err) {
+            bot.answerCallbackQuery(query.id, { text: "एरर: " + err.message });
+        }
     } else if (data === 'cancel_del') {
         delete adminDeleteSessions[chatId];
         await bot.editMessageText("❌ डिलीट ऑपरेशन रद्द।", { chat_id: chatId, message_id: messageId });
@@ -497,7 +567,7 @@ bot.on('callback_query', async (query) => {
 });
 
 bot.onText(/\/rename (.+)/, async (msg, match) => {
-    if (!isAdmin(msg.from.id)) return bot.sendMessage(msg.chat.id, "❌ Access Denied! Admin Only.");
+    if (!isAdmin(msg.from.id)) return bot.sendMessage(msg.chat.id, "❌ Access Denied!");
     const parts = match[1].split('=');
     if (parts.length !== 2) return bot.sendMessage(msg.chat.id, "⚠️ तरीका: `/rename Purana = Naya`", { parse_mode: 'Markdown' });
 
@@ -529,7 +599,7 @@ bot.on('photo', async (msg) => {
     }
 });
 
-// ----------------- QUEUED BOT UPLOAD LISTENER (1-CARD STRICT MERGE) -----------------
+// ----------------- QUEUED STRICT CARD MERGER -----------------
 let uploadQueue = Promise.resolve();
 
 bot.on('message', (msg) => {
@@ -609,7 +679,7 @@ app.get('/api/config', async (req, res) => {
         const btnPremium = await Config.findOne({ key: 'btn_premium_link' });
 
         res.json({
-            powered_by: poweredCfg ? poweredCfg.value : 'Powered by @asumit669',
+            powered_by: poweredCfg ? poweredCfg.value : 'Powered by Admin',
             adgram_enabled: adgramCfg ? adgramCfg.value : false,
             adgram_block_id: adgramBlock ? adgramBlock.value : '',
             btn_group: btnGroup ? btnGroup.value : '#',
@@ -619,9 +689,34 @@ app.get('/api/config', async (req, res) => {
     } catch (err) { res.status(500).json({ error: err.message }); }
 });
 
+// In-App Request Endpoint with Limit & Refer Check
 app.post('/api/request-movie', async (req, res) => {
     const { userId, username, movieName } = req.body;
+    const today = getTodayDateString();
+
     try {
+        let user = await User.findOne({ userId: userId.toString() });
+        if (!user) {
+            user = new User({ userId: userId.toString(), username: username || 'User' });
+            await user.save();
+        }
+
+        const me = await bot.getMe();
+        const refLink = `https://t.me/${me.username}?start=ref_${userId}`;
+
+        if (user.lastRequestDate === today) {
+            if (user.requestCredits <= 0) {
+                bot.sendMessage(userId, `⚠️ *आपकी आज की 1 फ़्री रिक्वेस्ट पूरी हो चुकी है!*\n\n🎁 आज और मूवी रिक्वेस्ट करने के लिए अपने **1 दोस्त को रेफर करें**:\n🔗 \`${refLink}\`\n\n*(जैसे ही आपका 1 दोस्त जुड़ेगा, आपकी +1 एक्स्ट्रा रिक्वेस्ट चालू हो जाएगी!)*`, { parse_mode: 'Markdown' }).catch(() => {});
+                return res.json({ success: false, limitReached: true });
+            } else {
+                user.requestCredits -= 1;
+            }
+        } else {
+            user.lastRequestDate = today;
+        }
+
+        await user.save();
+
         const newReq = new MovieRequest({ userId: userId.toString(), username: username || 'User', movieName });
         await newReq.save();
 
@@ -703,7 +798,6 @@ app.post('/api/send-file', async (req, res) => {
     } catch (err) { res.status(500).json({ error: err.message }); }
 });
 
-// ----------------- SECURE SERVER STARTUP -----------------
 const PORT = process.env.PORT || 10000;
 
 mongoose.connect(MONGO_URI)
