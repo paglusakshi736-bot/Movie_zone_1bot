@@ -67,34 +67,31 @@ function parseMediaInfo(rawText) {
 
     let text = rawText.split('\n')[0];
 
-    // 1. Detect Quality
     let qualityMatch = text.match(/(480p|720p|1080p|2160p|4k|hd|sd)/i);
     let quality = qualityMatch ? qualityMatch[0].toUpperCase() : '';
 
-    // 2. Detect Codec / Audio
     let codecMatch = text.match(/(hevc|x265|h[\s\._-]*265|x264|h[\s\._-]*264|10bit|hdr|ddp[\s\._-]*5[\s\._-]*1|5[\s\._-]*1|2[\s\._-]*0)/i);
     let codecInfo = codecMatch ? codecMatch[0].replace(/[\s\._-]+/g, '').toUpperCase() : '';
 
-    // 3. Detect Episode / Season
     let epMatch = text.match(/(s\d+\s*e\d+|season\s*\d+|ep\s*\d+|episode\s*\d+|e\d+)/i);
     let episode = epMatch ? epMatch[0].toUpperCase() : '';
 
-    // Build Label
     let labelParts = [];
     if (episode) labelParts.push(episode);
     if (quality) labelParts.push(quality);
     if (codecInfo && !labelParts.includes(codecInfo)) labelParts.push(codecInfo);
     let label = labelParts.length > 0 ? labelParts.join(' - ') : 'Standard Quality';
 
-    // 4. Ultra Aggressive Title Cleaning
     let clean = text
         .replace(/\[.*?\]/g, ' ')
         .replace(/\(.*?\)/g, ' ')
-        .replace(/(https?:\/\/[^\s]+|t\.me\/[^\s]+|www\.[^\s]+|@\w+|\.(mp4|mkv|avi|mov|zip|rar))/gi, ' ')
+        .replace(/(https?:\/\/[^\s]+|t\.me\/[^\s]+|www\.[^\s]+|@\w+)/gi, ' ')
+        .replace(/\.(mp4|mkv|avi|mov|zip|rar)/gi, ' ')
         .replace(/(480p|720p|1080p|2160p|4k|webdl|web-dl|webrip|bluray|hdrip|dvdrip|predvd|hdtc|esub|subs?|subtitles?)/gi, ' ')
-        .replace(/(x264|x265|hevc|h[\s\._-]*264|h[\s\._-]*265|avc|10bit|hdr|dv|aac2[\s\._-]*0|aac|amzn|ddp5[\s\._-]*1|ddp2[\s\._-]*0|ddp|dd\+|hindi|english|telugu|tamil|korean|dubbed|multi|paramount|official|hd|full)/gi, ' ')
+        .replace(/(x264|x265|hevc|h[\s\._-]*264|h[\s\._-]*265|avc|10bit|hdr|dv|aac2[\s\._-]*0|aac|amzn|ddp5[\s\._-]*1|ddp2[\s\._-]*0|ddp|dd\+|hindi|english|telugu|tamil|korean|dubbed|multi|paramount|official|hd|full|mkv)/gi, ' ')
         .replace(/\b(2[\s\._-]*0|5[\s\._-]*1|7[\s\._-]*1)\b/gi, ' ')
         .replace(/\b265\b|\b264\b/gi, ' ')
+        .replace(/\b[a-zA-Z]\b/g, ' ')
         .replace(/[^\w\s]/gi, ' ')
         .replace(/\s+/g, ' ')
         .trim();
@@ -122,17 +119,38 @@ async function checkMemberStatus(chatIdentifier, userId) {
     }
 }
 
-// ----------------- MULTI-SELECT BULK DELETE SYSTEM -----------------
+// ----------------- ADVANCED PAGINATED & SEARCH DELETE SYSTEM -----------------
 const adminDeleteSessions = {};
+const PAGE_LIMIT = 8; // Ek page par 8 movies dikhengi
 
-async function renderDeletePanel(chatId, messageId = null, selectedIds = []) {
-    const movies = await Movie.find().sort({ updatedAt: -1 }).limit(10);
-    
-    if (movies.length === 0) {
-        if (messageId) return bot.editMessageText("डेटाबेस में कोई मूवी नहीं है।", { chat_id: chatId, message_id: messageId });
-        return bot.sendMessage(chatId, "डेटाबेस में कोई मूवी नहीं है।");
+async function renderDeletePanel(chatId, messageId = null, page = 1, searchQuery = '') {
+    const query = searchQuery ? { title: new RegExp(searchQuery, 'i') } : {};
+    const totalMovies = await Movie.countDocuments(query);
+    const totalPages = Math.ceil(totalMovies / PAGE_LIMIT) || 1;
+
+    if (page > totalPages) page = totalPages;
+    if (page < 1) page = 1;
+
+    const movies = await Movie.find(query)
+        .sort({ updatedAt: -1 })
+        .skip((page - 1) * PAGE_LIMIT)
+        .limit(PAGE_LIMIT);
+
+    if (!adminDeleteSessions[chatId]) {
+        adminDeleteSessions[chatId] = { selected: [], page: 1, searchQuery: '' };
+    }
+    adminDeleteSessions[chatId].page = page;
+    adminDeleteSessions[chatId].searchQuery = searchQuery;
+
+    const selectedIds = adminDeleteSessions[chatId].selected;
+
+    if (totalMovies === 0) {
+        const noText = searchQuery ? `❌ "${searchQuery}" नाम से कोई मूवी नहीं मिली।` : "डेटाबेस में कोई मूवी नहीं है।";
+        if (messageId) return bot.editMessageText(noText, { chat_id: chatId, message_id: messageId });
+        return bot.sendMessage(chatId, noText);
     }
 
+    // Movie Checkbox Buttons
     let inline_keyboard = movies.map(m => {
         const isSelected = selectedIds.includes(m._id.toString());
         return [{
@@ -141,18 +159,32 @@ async function renderDeletePanel(chatId, messageId = null, selectedIds = []) {
         }];
     });
 
+    // Pagination Navigation Row
+    let navRow = [];
+    if (page > 1) {
+        navRow.push({ text: `⬅️ Back`, callback_data: `page_${page - 1}` });
+    }
+    navRow.push({ text: `📄 ${page}/${totalPages}`, callback_data: `noop` });
+    if (page < totalPages) {
+        navRow.push({ text: `Next ➡️`, callback_data: `page_${page + 1}` });
+    }
+    inline_keyboard.push(navRow);
+
+    // Action Row (Delete / Cancel)
     inline_keyboard.push([
         { text: `🗑️ Delete Selected (${selectedIds.length})`, callback_data: `confirm_bulk_del` },
         { text: `❌ Cancel`, callback_data: `cancel_del` }
     ]);
 
-    const text = `⚙️ *मल्टी-सेलेक्ट डिलीट पैनल*\n\nजिन मूवीज़ को हटाना है उन पर क्लिक करें (✅ टिक लगेगा), फिर नीचे *Delete Selected* दबाएं:`;
+    let text = `⚙️ *मल्टी-सेलेक्ट डिलीट पैनल*\n`;
+    if (searchQuery) text += `🔍 *सर्च फ़िल्टर:* \`${searchQuery}\`\n`;
+    text += `📊 *कुल मूवीज़:* ${totalMovies} (Page ${page}/${totalPages})\n\nमूवीज़ पर क्लिक करके टिक (✅) लगाएं, फिर नीचे *Delete Selected* दबाएं:`;
 
     if (messageId) {
         await bot.editMessageText(text, { chat_id: chatId, message_id: messageId, parse_mode: 'Markdown', reply_markup: { inline_keyboard } });
     } else {
         const sent = await bot.sendMessage(chatId, text, { parse_mode: 'Markdown', reply_markup: { inline_keyboard } });
-        adminDeleteSessions[chatId] = { messageId: sent.message_id, selected: [] };
+        adminDeleteSessions[chatId].messageId = sent.message_id;
     }
 }
 
@@ -198,10 +230,12 @@ bot.onText(/\/broadcast (.+)/, async (msg, match) => {
     } catch (e) { bot.sendMessage(msg.chat.id, "❌ एरर: " + e.message); }
 });
 
-bot.onText(/\/manage|\/delete/, async (msg) => {
+// Manage / Delete with optional search (e.g. /manage or /manage Prey)
+bot.onText(/\/(manage|delete)(?:\s+(.+))?/, async (msg, match) => {
     if (!isAdmin(msg.from.id)) return;
-    adminDeleteSessions[msg.chat.id] = { selected: [] };
-    await renderDeletePanel(msg.chat.id);
+    const searchQuery = match[2] ? match[2].trim() : '';
+    adminDeleteSessions[msg.chat.id] = { selected: [], page: 1, searchQuery };
+    await renderDeletePanel(msg.chat.id, null, 1, searchQuery);
 });
 
 bot.on('callback_query', async (query) => {
@@ -211,26 +245,39 @@ bot.on('callback_query', async (query) => {
     const data = query.data;
 
     if (!isAdmin(userId)) return bot.answerCallbackQuery(query.id, { text: "❌ एक्सेस डिनाइड!", show_alert: true });
-    if (!adminDeleteSessions[chatId]) adminDeleteSessions[chatId] = { selected: [] };
+    if (!adminDeleteSessions[chatId]) adminDeleteSessions[chatId] = { selected: [], page: 1, searchQuery: '' };
 
-    if (data.startsWith('toggle_')) {
+    const session = adminDeleteSessions[chatId];
+
+    if (data === 'noop') {
+        return bot.answerCallbackQuery(query.id);
+    } else if (data.startsWith('page_')) {
+        const newPage = parseInt(data.replace('page_', ''));
+        session.page = newPage;
+        await renderDeletePanel(chatId, messageId, newPage, session.searchQuery);
+        await bot.answerCallbackQuery(query.id);
+    } else if (data.startsWith('toggle_')) {
         const movieId = data.replace('toggle_', '');
-        let list = adminDeleteSessions[chatId].selected;
-        if (list.includes(movieId)) list = list.filter(id => id !== movieId);
-        else list.push(movieId);
-        adminDeleteSessions[chatId].selected = list;
-        await renderDeletePanel(chatId, messageId, list);
+        if (session.selected.includes(movieId)) {
+            session.selected = session.selected.filter(id => id !== movieId);
+        } else {
+            session.selected.push(movieId);
+        }
+        await renderDeletePanel(chatId, messageId, session.page, session.searchQuery);
         await bot.answerCallbackQuery(query.id);
     } else if (data === 'confirm_bulk_del') {
-        const list = adminDeleteSessions[chatId].selected;
-        if (list.length === 0) return bot.answerCallbackQuery(query.id, { text: "⚠️ कृपया पहले मूवी सेलेक्ट करें!", show_alert: true });
+        if (session.selected.length === 0) {
+            return bot.answerCallbackQuery(query.id, { text: "⚠️ कृपया पहले मूवी सेलेक्ट करें!", show_alert: true });
+        }
 
         try {
-            const result = await Movie.deleteMany({ _id: { $in: list } });
-            adminDeleteSessions[chatId].selected = [];
+            const result = await Movie.deleteMany({ _id: { $in: session.selected } });
+            session.selected = [];
             await bot.answerCallbackQuery(query.id, { text: `✅ ${result.deletedCount} मूवीज़ डिलीट!` });
             await bot.editMessageText(`🗑️ *सफलता:* कुल **${result.deletedCount}** मूवीज़ हटा दी गईं।`, { chat_id: chatId, message_id: messageId, parse_mode: 'Markdown' });
-        } catch (err) { bot.answerCallbackQuery(query.id, { text: "एरर: " + err.message }); }
+        } catch (err) {
+            bot.answerCallbackQuery(query.id, { text: "एरर: " + err.message });
+        }
     } else if (data === 'cancel_del') {
         delete adminDeleteSessions[chatId];
         await bot.editMessageText("❌ डिलीट ऑपरेशन रद्द।", { chat_id: chatId, message_id: messageId });
@@ -319,8 +366,10 @@ bot.onText(/\/setshortener (.+)/, async (msg, match) => {
     } catch (e) { bot.sendMessage(msg.chat.id, "❌ एरर: " + e.message); }
 });
 
-// ----------------- BOT UPLOAD LISTENER -----------------
-bot.on('message', async (msg) => {
+// ----------------- QUEUED BOT UPLOAD LISTENER (NO DUPLICATES) -----------------
+let uploadQueue = Promise.resolve();
+
+bot.on('message', (msg) => {
     if (msg.text && msg.text.startsWith('/')) return;
     if (msg.photo && msg.caption && msg.caption.startsWith('/setposter')) return;
 
@@ -330,42 +379,44 @@ bot.on('message', async (msg) => {
     const file = msg.video || msg.document;
     if (!file) return;
 
-    let rawInput = msg.caption || file.file_name || '';
-    const { cleanTitle, label } = parseMediaInfo(rawInput);
+    uploadQueue = uploadQueue.then(async () => {
+        let rawInput = msg.caption || file.file_name || '';
+        const { cleanTitle, label } = parseMediaInfo(rawInput);
 
-    const fileId = file.file_id;
-    const fileType = msg.video ? 'video' : 'document';
-    const fileSize = formatBytes(file.file_size);
-    let thumbFileId = file.thumbnail ? file.thumbnail.file_id : null;
+        const fileId = file.file_id;
+        const fileType = msg.video ? 'video' : 'document';
+        const fileSize = formatBytes(file.file_size);
+        let thumbFileId = file.thumbnail ? file.thumbnail.file_id : null;
 
-    try {
-        let movie = await Movie.findOne({ title: new RegExp(`^${cleanTitle}$`, 'i') });
-        let finalLabel = label;
-        if (fileSize) finalLabel += ` (${fileSize})`;
+        try {
+            let movie = await Movie.findOne({ title: new RegExp(`^${cleanTitle}$`, 'i') });
+            let finalLabel = label;
+            if (fileSize) finalLabel += ` (${fileSize})`;
 
-        if (movie) {
-            const countSameLabel = movie.files.filter(f => f.label.startsWith(label)).length;
-            if (countSameLabel > 0) finalLabel += ` [Option ${countSameLabel + 1}]`;
+            if (movie) {
+                const countSameLabel = movie.files.filter(f => f.label.startsWith(label)).length;
+                if (countSameLabel > 0) finalLabel += ` [Option ${countSameLabel + 1}]`;
 
-            movie.files.push({ label: finalLabel, fileId, fileType, fileSize });
-            if (thumbFileId && !movie.thumbFileId) movie.thumbFileId = thumbFileId;
-            movie.updatedAt = new Date();
-            await movie.save();
+                movie.files.push({ label: finalLabel, fileId, fileType, fileSize });
+                if (thumbFileId && !movie.thumbFileId) movie.thumbFileId = thumbFileId;
+                movie.updatedAt = new Date();
+                await movie.save();
 
-            await bot.sendMessage(msg.chat.id, `✅ *मौजूदा कार्ड में नया वर्ज़न जोड़ा गया!*\n\n🎬 *मूवी:* ${movie.title}\n📦 *क्वालिटी:* ${finalLabel}\n📂 *कुल फाइल्स:* ${movie.files.length}`, { parse_mode: 'Markdown' });
-        } else {
-            movie = new Movie({
-                title: cleanTitle,
-                thumbFileId,
-                files: [{ label: finalLabel, fileId, fileType, fileSize }]
-            });
-            await movie.save();
+                await bot.sendMessage(msg.chat.id, `✅ *मौजूदा कार्ड में नया वर्ज़न जोड़ा गया!*\n\n🎬 *मूवी:* ${movie.title}\n📦 *क्वालिटी:* ${finalLabel}\n📂 *कुल फाइल्स:* ${movie.files.length}`, { parse_mode: 'Markdown' });
+            } else {
+                movie = new Movie({
+                    title: cleanTitle,
+                    thumbFileId,
+                    files: [{ label: finalLabel, fileId, fileType, fileSize }]
+                });
+                await movie.save();
 
-            await bot.sendMessage(msg.chat.id, `✅ *नया मूवी कार्ड बना!* \n\n🎬 *मूवी:* ${cleanTitle}\n📦 *क्वालिटी:* ${finalLabel}`, { parse_mode: 'Markdown' });
+                await bot.sendMessage(msg.chat.id, `✅ *नया मूवी कार्ड बना!* \n\n🎬 *मूवी:* ${cleanTitle}\n📦 *क्वालिटी:* ${finalLabel}`, { parse_mode: 'Markdown' });
+            }
+        } catch (err) {
+            await bot.sendMessage(msg.chat.id, "❌ एरर: " + err.message);
         }
-    } catch (err) {
-        await bot.sendMessage(msg.chat.id, "❌ एरर: " + err.message);
-    }
+    });
 });
 
 // ----------------- API ENDPOINTS -----------------
@@ -441,7 +492,7 @@ mongoose.connect(MONGO_URI)
         bot.setMyCommands([
             { command: 'start', description: 'Open Movie Store' },
             { command: 'stats', description: 'View bot statistics' },
-            { command: 'manage', description: 'Multi-Select Delete movies' },
+            { command: 'manage', description: 'Multi-Select Delete movies (Supports pages & search)' },
             { command: 'forcesub', description: 'Enable/Disable Join Lock' },
             { command: 'setchannel', description: 'Set Channel for Join Lock' },
             { command: 'setgroup', description: 'Set Group for Join Lock' },
