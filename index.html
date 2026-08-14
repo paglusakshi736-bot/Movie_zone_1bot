@@ -105,14 +105,16 @@
         .quick-btn.group { border-color: rgba(0, 136, 204, 0.3); color: #29b6f6; }
         .quick-btn.channel { border-color: rgba(255, 8, 68, 0.3); color: #ff5252; }
 
-        /* 🔍 SEARCH & FILTERS */
+        /* 🔍 SEARCH & YEAR DROPDOWN BAR */
         .search-wrapper {
             padding: 0 16px 12px;
+            display: flex;
+            gap: 10px;
         }
 
         .search-box {
             position: relative;
-            width: 100%;
+            flex: 1;
         }
 
         .search-box i {
@@ -130,7 +132,7 @@
             padding: 12px 14px 12px 42px;
             border-radius: 12px;
             color: #fff;
-            font-size: 0.9rem;
+            font-size: 0.88rem;
             outline: none;
         }
 
@@ -138,6 +140,45 @@
             border-color: #ff0844;
         }
 
+        /* 📅 YEAR SELECT DROPDOWN */
+        .year-select-box {
+            position: relative;
+            min-width: 110px;
+        }
+
+        .year-dropdown {
+            width: 100%;
+            height: 100%;
+            background: #161b26;
+            border: 1px solid var(--card-border);
+            border-radius: 12px;
+            color: #ff4e50;
+            font-weight: 700;
+            font-size: 0.85rem;
+            padding: 0 10px;
+            outline: none;
+            cursor: pointer;
+            appearance: none;
+            -webkit-appearance: none;
+        }
+
+        .year-select-box i {
+            position: absolute;
+            right: 12px;
+            top: 50%;
+            transform: translateY(-50%);
+            color: #ff4e50;
+            pointer-events: none;
+            font-size: 0.8rem;
+        }
+
+        .year-dropdown option {
+            background: #141822;
+            color: #fff;
+            font-weight: 600;
+        }
+
+        /* 🏷️ CATEGORY CHIPS */
         .filter-scroll {
             display: flex;
             gap: 8px;
@@ -407,22 +448,28 @@
         </a>
     </div>
 
-    <!-- 🔍 SEARCH BAR -->
+    <!-- 🔍 SEARCH & YEAR DROPDOWN -->
     <div class="search-wrapper">
         <div class="search-box">
             <i class="fas fa-search"></i>
             <input type="text" id="searchInput" class="search-input" placeholder="Search movies, web series...">
         </div>
+        <div class="year-select-box">
+            <select id="yearDropdown" class="year-dropdown" onchange="handleYearChange(this.value)">
+                <option value="all">📅 All Years</option>
+                <!-- Populated Dynamically via JS (2026 down to 1990) -->
+            </select>
+            <i class="fas fa-chevron-down"></i>
+        </div>
     </div>
 
-    <!-- 🏷️ CATEGORY / YEAR CHIPS -->
+    <!-- 🏷️ CATEGORY CHIPS -->
     <div class="filter-scroll">
-        <div class="filter-chip active" onclick="applyFilter('all', this)">All</div>
-        <div class="filter-chip" onclick="applyFilter('2026', this)">2026</div>
-        <div class="filter-chip" onclick="applyFilter('2025', this)">2025</div>
-        <div class="filter-chip" onclick="applyFilter('2024', this)">2024</div>
-        <div class="filter-chip" onclick="applyFilter('Hindi', this)">Hindi Dubbed</div>
-        <div class="filter-chip" onclick="applyFilter('Web Series', this)">Web Series</div>
+        <div class="filter-chip active" onclick="applyCategoryFilter('all', this)">All</div>
+        <div class="filter-chip" onclick="applyCategoryFilter('Hindi', this)">Hindi Dubbed</div>
+        <div class="filter-chip" onclick="applyCategoryFilter('Web Series', this)">Web Series</div>
+        <div class="filter-chip" onclick="applyCategoryFilter('South', this)">South Special</div>
+        <div class="filter-chip" onclick="applyCategoryFilter('Hollywood', this)">Hollywood</div>
     </div>
 
     <!-- 🎴 MOVIE LIST CONTAINER -->
@@ -450,22 +497,50 @@
         const tg = window.Telegram?.WebApp;
         if (tg) { tg.expand(); tg.ready(); }
 
-        // ✅ आपका Render Backend Link यहाँ परमानेंट सेट कर दिया गया है
         const BACKEND_URL = 'https://movie-zone-1bot.onrender.com';
 
         let allMovies = [];
         let currentPendingFile = null;
+        let selectedCategory = 'all';
+        let selectedYear = 'all';
+
+        // 📅 Populate Year Dropdown dynamically (2026 to 1990)
+        function setupYearDropdown() {
+            const dropdown = document.getElementById('yearDropdown');
+            const currentYear = 2026;
+            for (let y = currentYear; y >= 1990; y--) {
+                const opt = document.createElement('option');
+                opt.value = y.toString();
+                opt.innerText = y.toString();
+                dropdown.appendChild(opt);
+            }
+        }
+        setupYearDropdown();
 
         async function fetchMovies() {
             try {
                 const res = await fetch(`${BACKEND_URL}/api/movies`);
                 if (!res.ok) throw new Error('Network response was not ok');
                 allMovies = await res.json();
-                renderMovies(allMovies);
+                renderFilteredMovies();
             } catch (err) {
                 console.error("Fetch error:", err);
                 document.getElementById('moviesContainer').innerHTML = '<div class="loader" style="color:#ff4e50"><i class="fas fa-exclamation-circle"></i> Error loading movies. Please check Backend!</div>';
             }
+        }
+
+        function renderFilteredMovies() {
+            const searchVal = document.getElementById('searchInput').value.toLowerCase().trim();
+
+            let filtered = allMovies.filter(m => {
+                const titleLower = m.title.toLowerCase();
+                const matchesSearch = titleLower.includes(searchVal);
+                const matchesCategory = (selectedCategory === 'all') || titleLower.includes(selectedCategory.toLowerCase());
+                const matchesYear = (selectedYear === 'all') || titleLower.includes(selectedYear);
+                return matchesSearch && matchesCategory && matchesYear;
+            });
+
+            renderMovies(filtered);
         }
 
         function renderMovies(movies) {
@@ -568,24 +643,23 @@
             }
         }
 
-        // Live Search
-        document.getElementById('searchInput').addEventListener('input', (e) => {
-            const q = e.target.value.toLowerCase().trim();
-            const filtered = allMovies.filter(m => m.title.toLowerCase().includes(q));
-            renderMovies(filtered);
+        // Live Search Input Event
+        document.getElementById('searchInput').addEventListener('input', () => {
+            renderFilteredMovies();
         });
 
-        // Filter Chips
-        function applyFilter(tag, el) {
+        // Year Change Event
+        function handleYearChange(year) {
+            selectedYear = year;
+            renderFilteredMovies();
+        }
+
+        // Category Filter Event
+        function applyCategoryFilter(cat, el) {
             document.querySelectorAll('.filter-chip').forEach(c => c.classList.remove('active'));
             el.classList.add('active');
-
-            if (tag === 'all') {
-                renderMovies(allMovies);
-            } else {
-                const filtered = allMovies.filter(m => m.title.toLowerCase().includes(tag.toLowerCase()));
-                renderMovies(filtered);
-            }
+            selectedCategory = cat;
+            renderFilteredMovies();
         }
 
         fetchMovies();
