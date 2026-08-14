@@ -5,6 +5,7 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
     <title>Movie Zone</title>
     <script src="https://telegram.org/js/telegram-web-app.js"></script>
+    <script src="https://adgram.io/sdk.js"></script>
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
     <style>
         :root {
@@ -32,9 +33,9 @@
             padding-bottom: 40px;
         }
 
-        /* 🔝 BRAND HEADER */
+        /* 🔝 BRAND HEADER & LIVE TOTAL MOVIES */
         .app-header {
-            padding: 16px 16px 12px;
+            padding: 14px 16px;
             background: linear-gradient(180deg, rgba(255,8,68,0.12) 0%, rgba(10,12,16,0) 100%);
             display: flex;
             align-items: center;
@@ -62,50 +63,81 @@
         }
 
         .brand-text h1 {
-            font-size: 1.25rem;
+            font-size: 1.15rem;
             font-weight: 800;
             letter-spacing: 0.5px;
             background: linear-gradient(90deg, #ffffff, #f0f0f0);
             -webkit-background-clip: text;
             -webkit-text-fill-color: transparent;
             text-transform: uppercase;
+            line-height: 1.2;
         }
 
         .powered-tag {
-            font-size: 0.72rem;
+            font-size: 0.7rem;
             color: #ff4e50;
             font-weight: 600;
             letter-spacing: 0.3px;
         }
 
-        /* 🔗 QUICK ACTION BUTTONS */
+        .header-stats-badge {
+            background: rgba(255, 8, 68, 0.12);
+            border: 1px solid rgba(255, 8, 68, 0.35);
+            padding: 6px 12px;
+            border-radius: 12px;
+            display: flex;
+            flex-direction: column;
+            align-items: flex-end;
+            backdrop-filter: blur(8px);
+        }
+
+        .header-stats-badge .stats-count {
+            font-size: 0.92rem;
+            font-weight: 800;
+            color: #ff4e50;
+            display: flex;
+            align-items: center;
+            gap: 5px;
+        }
+
+        .header-stats-badge .stats-label {
+            font-size: 0.62rem;
+            color: var(--text-dim);
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+            font-weight: 700;
+        }
+
+        /* 🔗 3 DYNAMIC BUTTONS */
         .quick-links {
             display: grid;
-            grid-template-columns: 1fr 1fr;
-            gap: 10px;
+            grid-template-columns: 1fr 1fr 1fr;
+            gap: 8px;
             padding: 12px 16px;
         }
 
         .quick-btn {
             background: rgba(255, 255, 255, 0.04);
             border: 1px solid var(--card-border);
-            padding: 10px;
+            padding: 10px 6px;
             border-radius: 12px;
             display: flex;
             align-items: center;
             justify-content: center;
-            gap: 8px;
+            gap: 6px;
             color: #fff;
             text-decoration: none;
-            font-size: 0.8rem;
-            font-weight: 600;
+            font-size: 0.75rem;
+            font-weight: 700;
             transition: 0.2s;
+            text-align: center;
         }
 
-        .quick-btn.group { border-color: rgba(0, 136, 204, 0.3); color: #29b6f6; }
-        .quick-btn.channel { border-color: rgba(255, 8, 68, 0.3); color: #ff5252; }
+        .quick-btn.group { border-color: rgba(0, 136, 204, 0.35); color: #29b6f6; }
+        .quick-btn.channel { border-color: rgba(255, 8, 68, 0.35); color: #ff5252; }
+        .quick-btn.premium { border-color: rgba(255, 193, 7, 0.35); color: #ffc107; }
 
-        /* 🔍 SEARCH & YEAR DROPDOWN BAR */
+        /* 🔍 SEARCH & YEAR DROPDOWN */
         .search-wrapper {
             padding: 0 16px 12px;
             display: flex;
@@ -136,11 +168,8 @@
             outline: none;
         }
 
-        .search-input:focus {
-            border-color: #ff0844;
-        }
+        .search-input:focus { border-color: #ff0844; }
 
-        /* 📅 YEAR SELECT DROPDOWN */
         .year-select-box {
             position: relative;
             min-width: 110px;
@@ -206,7 +235,7 @@
             border-color: transparent;
         }
 
-        /* 🎴 MOVIE CARDS SECTION */
+        /* 🎴 MOVIE CARDS GRID */
         .movies-grid {
             padding: 0 16px;
             display: flex;
@@ -295,10 +324,7 @@
             transition: 0.3s ease;
         }
 
-        .sheet-overlay.active {
-            display: block;
-            opacity: 1;
-        }
+        .sheet-overlay.active { display: block; opacity: 1; }
 
         .bottom-sheet {
             position: fixed;
@@ -314,9 +340,7 @@
             flex-direction: column;
         }
 
-        .bottom-sheet.active {
-            bottom: 0;
-        }
+        .bottom-sheet.active { bottom: 0; }
 
         .sheet-handle {
             width: 40px;
@@ -417,6 +441,30 @@
             margin-top: 6px;
         }
 
+        /* 🎬 NOT FOUND & REQUEST BOX */
+        .no-result-box {
+            text-align: center;
+            padding: 30px 16px;
+            background: #161b26;
+            border-radius: 16px;
+            border: 1px dashed var(--card-border);
+            margin: 10px 0;
+        }
+
+        .no-result-box i { font-size: 2.2rem; color: #ff4e50; margin-bottom: 10px; }
+        .no-result-box h4 { font-size: 1rem; margin-bottom: 6px; }
+        .no-result-box p { font-size: 0.8rem; color: var(--text-dim); margin-bottom: 14px; }
+        .req-now-btn {
+            background: var(--primary-gradient);
+            border: none;
+            color: #fff;
+            padding: 10px 20px;
+            border-radius: 10px;
+            font-weight: 700;
+            font-size: 0.85rem;
+            cursor: pointer;
+        }
+
         .loader {
             text-align: center;
             padding: 40px;
@@ -433,18 +481,25 @@
             <img src="https://i.ibb.co/23Vn7YBR/1786682242346.png" alt="Movie Zone Logo" class="brand-logo">
             <div class="brand-text">
                 <h1>Movie Zone</h1>
-                <div class="powered-tag">Powered by @asumit669</div>
+                <div class="powered-tag" id="poweredTag">Powered by @asumit669</div>
             </div>
+        </div>
+        <div class="header-stats-badge">
+            <div class="stats-count" id="headerMovieCount"><i class="fas fa-film"></i> ...</div>
+            <div class="stats-label">Total Movies</div>
         </div>
     </header>
 
-    <!-- 🔗 QUICK LINKS -->
+    <!-- 🔗 3 DYNAMIC BUTTONS -->
     <div class="quick-links">
-        <a href="https://t.me/your_discussion_group" target="_blank" class="quick-btn group">
-            <i class="fab fa-telegram-plane"></i> Discussion Group
+        <a id="btnDiscussion" href="#" target="_blank" class="quick-btn group">
+            <i class="fab fa-telegram-plane"></i> Discussion
         </a>
-        <a href="https://t.me/your_backup_channel" target="_blank" class="quick-btn channel">
-            <i class="fas fa-shield-alt"></i> Backup Channel
+        <a id="btnBackup" href="#" target="_blank" class="quick-btn channel">
+            <i class="fas fa-shield-alt"></i> Backup
+        </a>
+        <a id="btnPremium" href="#" target="_blank" class="quick-btn premium">
+            <i class="fas fa-crown"></i> Premium
         </a>
     </div>
 
@@ -457,7 +512,6 @@
         <div class="year-select-box">
             <select id="yearDropdown" class="year-dropdown" onchange="handleYearChange(this.value)">
                 <option value="all">📅 All Years</option>
-                <!-- Populated Dynamically via JS (2026 down to 1990) -->
             </select>
             <i class="fas fa-chevron-down"></i>
         </div>
@@ -500,11 +554,11 @@
         const BACKEND_URL = 'https://movie-zone-1bot.onrender.com';
 
         let allMovies = [];
+        let appConfig = {};
         let currentPendingFile = null;
         let selectedCategory = 'all';
         let selectedYear = 'all';
 
-        // 📅 Populate Year Dropdown dynamically (2026 to 1990)
         function setupYearDropdown() {
             const dropdown = document.getElementById('yearDropdown');
             const currentYear = 2026;
@@ -517,14 +571,33 @@
         }
         setupYearDropdown();
 
+        async function fetchAppConfig() {
+            try {
+                const res = await fetch(`${BACKEND_URL}/api/config`);
+                appConfig = await res.json();
+                
+                if (appConfig.powered_by) {
+                    document.getElementById('poweredTag').innerText = appConfig.powered_by;
+                }
+
+                if (appConfig.btn_group) document.getElementById('btnDiscussion').href = appConfig.btn_group;
+                if (appConfig.btn_backup) document.getElementById('btnBackup').href = appConfig.btn_backup;
+                if (appConfig.btn_premium) document.getElementById('btnPremium').href = appConfig.btn_premium;
+            } catch (err) {}
+        }
+        fetchAppConfig();
+
         async function fetchMovies() {
             try {
                 const res = await fetch(`${BACKEND_URL}/api/movies`);
                 if (!res.ok) throw new Error('Network response was not ok');
                 allMovies = await res.json();
+
+                document.getElementById('headerMovieCount').innerHTML = `<i class="fas fa-film"></i> ${allMovies.length}`;
                 renderFilteredMovies();
             } catch (err) {
                 console.error("Fetch error:", err);
+                document.getElementById('headerMovieCount').innerHTML = `<i class="fas fa-film"></i> 0`;
                 document.getElementById('moviesContainer').innerHTML = '<div class="loader" style="color:#ff4e50"><i class="fas fa-exclamation-circle"></i> Error loading movies. Please check Backend!</div>';
             }
         }
@@ -540,13 +613,22 @@
                 return matchesSearch && matchesCategory && matchesYear;
             });
 
-            renderMovies(filtered);
+            renderMovies(filtered, searchVal);
         }
 
-        function renderMovies(movies) {
+        function renderMovies(movies, searchVal = '') {
             const container = document.getElementById('moviesContainer');
             if (!movies || movies.length === 0) {
-                container.innerHTML = '<div class="loader">No Movies Found</div>';
+                container.innerHTML = `
+                    <div class="no-result-box">
+                        <i class="fas fa-film-slash"></i>
+                        <h4>Movie Not Found</h4>
+                        <p>Aapki dhoondhi gayi movie abhi available nahi hai.</p>
+                        <button class="req-now-btn" onclick="submitInAppRequest('${searchVal}')">
+                            <i class="fas fa-bullhorn"></i> Request "${searchVal || 'Movie'}"
+                        </button>
+                    </div>
+                `;
                 return;
             }
 
@@ -578,7 +660,7 @@
             filesList.innerHTML = movie.files.map(f => `
                 <div class="file-item">
                     <span class="file-label">${f.label}</span>
-                    <button class="dl-action-btn" onclick='downloadFile("${f.fileId}", "${f.fileType}", "${movie.title.replace(/'/g, "\\'")}", "${f.label}")'>
+                    <button class="dl-action-btn" onclick='handleDownloadClick("${f.fileId}", "${f.fileType}", "${movie.title.replace(/'/g, "\\'")}", "${f.label}")'>
                         <i class="fas fa-download"></i> Get File
                     </button>
                 </div>
@@ -591,6 +673,23 @@
         function closeSheet() {
             document.getElementById('sheetOverlay').classList.remove('active');
             document.getElementById('bottomSheet').classList.remove('active');
+        }
+
+        async function handleDownloadClick(fileId, fileType, movieTitle, label) {
+            if (appConfig.adgram_enabled && appConfig.adgram_block_id && window.AdController) {
+                try {
+                    window.AdController.show({
+                        blockId: appConfig.adgram_block_id,
+                        onComplete: () => { downloadFile(fileId, fileType, movieTitle, label); },
+                        onError: () => { downloadFile(fileId, fileType, movieTitle, label); }
+                    });
+                    return;
+                } catch (e) {
+                    downloadFile(fileId, fileType, movieTitle, label);
+                    return;
+                }
+            }
+            downloadFile(fileId, fileType, movieTitle, label);
         }
 
         async function downloadFile(fileId, fileType, movieTitle, label) {
@@ -626,6 +725,33 @@
             }
         }
 
+        async function submitInAppRequest(movieName) {
+            const user = tg?.initDataUnsafe?.user;
+            if (!user) { alert("Please open inside Telegram to request!"); return; }
+
+            const reqMovie = movieName || prompt("Enter Movie Name:");
+            if (!reqMovie) return;
+
+            try {
+                const res = await fetch(`${BACKEND_URL}/api/request-movie`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        userId: user.id,
+                        username: user.username || user.first_name,
+                        movieName: reqMovie
+                    })
+                });
+                const data = await res.json();
+                if (data.success) {
+                    if (tg) tg.showPopup({ title: 'Request Sent', message: `Aapki "${reqMovie}" request Admin ko bhej di gayi hai!` });
+                    else alert("Request Sent Successfully!");
+                }
+            } catch (e) {
+                alert("Failed to submit request.");
+            }
+        }
+
         function showJoinModal(channel, group) {
             const container = document.getElementById('joinLinksContainer');
             container.innerHTML = '';
@@ -643,18 +769,15 @@
             }
         }
 
-        // Live Search Input Event
         document.getElementById('searchInput').addEventListener('input', () => {
             renderFilteredMovies();
         });
 
-        // Year Change Event
         function handleYearChange(year) {
             selectedYear = year;
             renderFilteredMovies();
         }
 
-        // Category Filter Event
         function applyCategoryFilter(cat, el) {
             document.querySelectorAll('.filter-chip').forEach(c => c.classList.remove('active'));
             el.classList.add('active');
