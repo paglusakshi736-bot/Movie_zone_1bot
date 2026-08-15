@@ -35,8 +35,8 @@ const fileItemSchema = new mongoose.Schema({
 });
 
 const movieSchema = new mongoose.Schema({
-    title: { type: String, required: true, index: true },
-    cleanKey: { type: String, index: true },
+    title: { type: String, required: true },
+    cleanKey: { type: String, required: true, unique: true, index: true },
     thumbFileId: String,
     files: [fileItemSchema],
     updatedAt: { type: Date, default: Date.now }
@@ -79,17 +79,18 @@ function getTodayDateString() {
     return `${d.getFullYear()}-${d.getMonth() + 1}-${d.getDate()}`;
 }
 
-// ----------------- ADVANCED 100% CLEAN TITLE PARSER -----------------
+// ----------------- STRICT TITLE & YEAR PARSER -----------------
 function parseMediaInfo(rawText) {
     if (!rawText) return { cleanTitle: 'Movie ' + new Date().toLocaleDateString('en-GB'), cleanKey: 'movie', label: 'Standard Quality' };
 
     let text = rawText.split('\n')[0];
 
-    let qualityMatch = text.match(/(2160p|1080p|720p|540p|480p|360p|4k|hd|sd)/i);
-    let quality = qualityMatch ? qualityMatch[0].toUpperCase() : '';
+    // क्वालिटी और कोडेक निकालना
+    let qMatch = text.match(/(2160p|1080p|720p|540p|480p|360p|4k|hd|sd)/i);
+    let quality = qMatch ? qMatch[0].toUpperCase() : '';
 
-    let codecMatch = text.match(/(hevc|x265|h[\s\._-]*265|x264|h[\s\._-]*264|10bit|hdr|ddp[\s\._-]*5[\s\._-]*1|5[\s\._-]*1|2[\s\._-]*0|aac|ds)/i);
-    let codecInfo = codecMatch ? codecMatch[0].replace(/[\s\._-]+/g, '').toUpperCase() : '';
+    let cMatch = text.match(/(hevc|x265|h[\s\._-]*265|x264|h[\s\._-]*264|10bit|hdr|ddp[\s\._-]*5[\s\._-]*1|5[\s\._-]*1|2[\s\._-]*0|aac|ds)/i);
+    let codecInfo = cMatch ? cMatch[0].replace(/[\s\._-]+/g, '').toUpperCase() : '';
 
     let epMatch = text.match(/(s\d+\s*e\d+|season\s*\d+|ep\s*\d+|episode\s*\d+|e\d+)/i);
     let episode = epMatch ? epMatch[0].toUpperCase() : '';
@@ -100,26 +101,31 @@ function parseMediaInfo(rawText) {
     if (codecInfo && !labelParts.includes(codecInfo)) labelParts.push(codecInfo);
     let label = labelParts.length > 0 ? labelParts.join(' - ') : 'Standard Quality';
 
+    // 1. लिंक्स, ब्रैकेट्स, एक्सटेंशन हटाना
     let clean = text
-        .replace(/\[.*?\]/g, ' ')
-        .replace(/\(.*?\)/g, ' ')
+        .replace(/\[.*?\]|\(.*?\)/g, ' ')
         .replace(/(https?:\/\/[^\s]+|t\.me\/[^\s]+|www\.[^\s]+|@\w+)/gi, ' ')
         .replace(/\.(mp4|mkv|avi|mov|zip|rar)/gi, ' ')
-        .replace(/(2160p|1080p|720p|540p|480p|360p|4k|webdl|web-dl|webrip|web\s*dl|bluray|hdrip|dvdrip|predvd|hdtc|esub|subs?|subtitles?)/gi, ' ')
-        .replace(/(x264|x265|hevc|h[\s\._-]*264|h[\s\._-]*265|avc|10bit|hdr|dv|aac2[\s\._-]*0|aac|amzn|ddp5[\s\._-]*1|ddp2[\s\._-]*0|ddp|dd\+|hindi|english|telugu|tamil|korean|dubbed|multi|official|hd|full|mkv)/gi, ' ')
-        .replace(/\b(nf|netflix|amzn|prime|hotstar|hs|zee5|sonyliv|jiocinema|jio|mx|paramount|hulu|disney|apple|aha)\b/gi, ' ')
-        .replace(/\b(ds|es|dl|x2|x1|v2|v1)\b/gi, ' ')
-        .replace(/\b(2[\s\._-]*0|5[\s\._-]*1|7[\s\._-]*1)\b/gi, ' ')
-        .replace(/\b265\b|\b264\b/gi, ' ')
-        .replace(/\b[a-zA-Z]\b/g, ' ')
-        .replace(/[^\w\s]/gi, ' ')
-        .replace(/\s+/g, ' ')
+        .replace(/[\._\-\+]/g, ' ')
         .trim();
 
+    // 2. 4-digit Year (1900 to 2099) को ढूंढना
+    let yearMatch = clean.match(/\b(19\d\d|20\d\d)\b/);
+    if (yearMatch) {
+        let yearIndex = clean.indexOf(yearMatch[0]);
+        // साल के बाद का सारा कचरा (Line, Srbripx, Offic, आदि) सीधे उड़ा देना!
+        clean = clean.substring(0, yearIndex + 4);
+    } else {
+        clean = clean.replace(/(2160p|1080p|720p|540p|480p|360p|4k|webdl|web-dl|webrip|web\s*dl|bluray|hdrip|dvdrip|predvd|hdtc|esub|subs?|subtitles?).*/gi, '');
+    }
+
+    // 3. एक्स्ट्रा सिम्बल साफ़ करके टाइटल केस बनाना
+    clean = clean.replace(/[^a-zA-Z0-9\s]/g, ' ').replace(/\s+/g, ' ').trim();
     if (clean.length < 2) clean = 'Movie ' + new Date().toLocaleDateString('en-GB');
     clean = clean.split(' ').map(w => w.charAt(0).toUpperCase() + w.slice(1).toLowerCase()).join(' ');
 
-    let cleanKey = clean.toLowerCase().replace(/\s+/g, '');
+    // 4. Clean-Key (अल्फा-न्यूमेरिक)
+    let cleanKey = clean.toLowerCase().replace(/[^a-z0-9]/g, '');
 
     return { cleanTitle: clean, cleanKey, label };
 }
@@ -205,7 +211,7 @@ async function renderDeletePanel(chatId, messageId = null, page = 1, searchQuery
     }
 }
 
-// ----------------- PUBLIC COMMANDS (FOR ALL USERS) -----------------
+// ----------------- PUBLIC COMMANDS -----------------
 bot.onText(/\/start(?:\s+(.+))?/, async (msg, match) => {
     const userId = msg.from.id.toString();
     const param = match[1] ? match[1].trim() : '';
@@ -219,7 +225,6 @@ bot.onText(/\/start(?:\s+(.+))?/, async (msg, match) => {
                 const potentialRef = param.replace('ref_', '');
                 if (potentialRef !== userId) {
                     referrerId = potentialRef;
-                    // Give +1 referral count and +1 extra request credit to referrer
                     await User.findOneAndUpdate(
                         { userId: referrerId },
                         { $inc: { referralsCount: 1, requestCredits: 1 } }
@@ -254,7 +259,6 @@ bot.onText(/\/refer/, async (msg) => {
     } catch (e) { bot.sendMessage(msg.chat.id, "❌ एरर: " + e.message); }
 });
 
-// 🎬 Smart Request with 1 Daily Free + 1 Refer = 1 Request Logic
 bot.onText(/\/request (.+)/, async (msg, match) => {
     const movieReqName = match[1].trim();
     const userId = msg.from.id.toString();
@@ -271,7 +275,6 @@ bot.onText(/\/request (.+)/, async (msg, match) => {
         const me = await bot.getMe();
         const refLink = `https://t.me/${me.username}?start=ref_${userId}`;
 
-        // Check Daily Free Limit & Credits
         if (user.lastRequestDate === today) {
             if (user.requestCredits <= 0) {
                 return bot.sendMessage(msg.chat.id, `⚠️ *आपकी आज की 1 फ़्री रिक्वेस्ट पूरी हो चुकी है!*\n\n🎁 आज और मूवी रिक्वेस्ट करने के लिए अपने **1 दोस्त को रेफर करें**:\n🔗 \`${refLink}\`\n\n*(जैसे ही आपका 1 दोस्त जुड़ेगा, आपको +1 रिक्वेस्ट तुरंत मिल जाएगी!)*`, { parse_mode: 'Markdown' });
@@ -574,7 +577,7 @@ bot.onText(/\/rename (.+)/, async (msg, match) => {
     try {
         const movie = await Movie.findOneAndUpdate(
             { title: new RegExp(`^${parts[0].trim()}$`, 'i') },
-            { title: parts[1].trim(), cleanKey: parts[1].trim().toLowerCase().replace(/\s+/g, '') },
+            { title: parts[1].trim(), cleanKey: parts[1].trim().toLowerCase().replace(/[^a-z0-9]/g, '') },
             { new: true }
         );
         if (movie) bot.sendMessage(msg.chat.id, `✅ नाम बदलकर *"${movie.title}"* कर दिया गया!`, { parse_mode: 'Markdown' });
@@ -599,7 +602,7 @@ bot.on('photo', async (msg) => {
     }
 });
 
-// ----------------- QUEUED STRICT CARD MERGER -----------------
+// ----------------- ATOMIC SINGLE CARD MERGER -----------------
 let uploadQueue = Promise.resolve();
 
 bot.on('message', (msg) => {
@@ -622,38 +625,31 @@ bot.on('message', (msg) => {
         let thumbFileId = file.thumbnail ? file.thumbnail.file_id : null;
 
         try {
-            let movie = await Movie.findOne({
-                $or: [
-                    { cleanKey: cleanKey },
-                    { title: new RegExp(`^${cleanTitle}$`, 'i') }
-                ]
-            });
-
             let finalLabel = label;
             if (fileSize) finalLabel += ` (${fileSize})`;
 
-            if (movie) {
-                const countSameLabel = movie.files.filter(f => f.label.startsWith(label)).length;
-                if (countSameLabel > 0) finalLabel += ` [Option ${countSameLabel + 1}]`;
-
-                movie.files.push({ label: finalLabel, fileId, fileType, fileSize });
-                if (thumbFileId && !movie.thumbFileId) movie.thumbFileId = thumbFileId;
-                movie.cleanKey = cleanKey;
-                movie.updatedAt = new Date();
-                await movie.save();
-
-                await bot.sendMessage(msg.chat.id, `✅ *मौजूदा कार्ड में नया वर्ज़न जोड़ा गया!*\n\n🎬 *मूवी:* ${movie.title}\n📦 *क्वालिटी:* ${finalLabel}\n📂 *कुल फाइल्स:* ${movie.files.length}`, { parse_mode: 'Markdown' });
-            } else {
-                movie = new Movie({
+            // ATOMIC DATABASE UPSERT
+            let updateQuery = {
+                $push: {
+                    files: { label: finalLabel, fileId, fileType, fileSize }
+                },
+                $set: {
                     title: cleanTitle,
-                    cleanKey,
-                    thumbFileId,
-                    files: [{ label: finalLabel, fileId, fileType, fileSize }]
-                });
-                await movie.save();
+                    updatedAt: new Date()
+                }
+            };
 
-                await bot.sendMessage(msg.chat.id, `✅ *नया मूवी कार्ड बना!* \n\n🎬 *मूवी:* ${cleanTitle}\n📦 *क्वालिटी:* ${finalLabel}`, { parse_mode: 'Markdown' });
+            if (thumbFileId) {
+                updateQuery.$setOnInsert = { thumbFileId: thumbFileId };
             }
+
+            const movie = await Movie.findOneAndUpdate(
+                { cleanKey: cleanKey },
+                updateQuery,
+                { upsert: true, new: true, setDefaultsOnInsert: true }
+            );
+
+            await bot.sendMessage(msg.chat.id, `✅ *मूवी कार्ड अपडेटेड!*\n\n🎬 *मूवी:* ${cleanTitle}\n📦 *क्वालिटी:* ${finalLabel}\n📂 *कुल फाइल्स:* ${movie.files.length}`, { parse_mode: 'Markdown' });
         } catch (err) {
             await bot.sendMessage(msg.chat.id, "❌ एरर: " + err.message);
         }
@@ -689,7 +685,6 @@ app.get('/api/config', async (req, res) => {
     } catch (err) { res.status(500).json({ error: err.message }); }
 });
 
-// In-App Request Endpoint with Limit & Refer Check
 app.post('/api/request-movie', async (req, res) => {
     const { userId, username, movieName } = req.body;
     const today = getTodayDateString();
