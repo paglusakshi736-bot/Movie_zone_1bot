@@ -1,0 +1,71 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+  <title>Movie Zone Mini App</title>
+  <script src="https://telegram.org/js/telegram-web-app.js"></script>
+  <link rel="stylesheet" href="style.css">
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+</head>
+<body>
+  <div class="app-container">
+    <!-- Top Header -->
+    <header class="header">
+      <div class="brand">
+        <img src="logo.png" alt="Logo" class="logo-img" onerror="this.src='https://placehold.co/100x100/e50914/ffffff?text=MZ'">
+        <div class="brand-text">
+          <h1 id="app-title">MOVIE ZONE</h1>
+          <p id="powered-by-text">Powered by Movie Zone</p>
+        </div>
+      </div>
+      <div class="total-badge">
+        <i class="fa-solid fa-film"></i> <span id="total-count">0</span>
+        <small>TOTAL MOVIES</small>
+      </div>
+    </header>
+
+    <!-- Quick Navigation Buttons -->
+    <div class="quick-nav">
+      <a href="#" id="discussion-btn" class="nav-btn"><i class="fa-brands fa-telegram"></i> Discussion</a>
+      <a href="#" id="backup-btn" class="nav-btn"><i class="fa-solid fa-shield-halved"></i> Updates</a>
+      <a href="#" id="premium-btn" class="nav-btn vip"><i class="fa-solid fa-crown"></i> Premium</a>
+    </div>
+
+    <!-- Search & TMDb Sort Dropdown -->
+    <div class="search-section">
+      <div class="search-bar">
+        <i class="fa-solid fa-magnifying-glass"></i>
+        <input type="text" id="search-input" placeholder="Search movies, web series...">
+      </div>
+      <div class="filter-dropdown">
+        <select id="sort-filter">
+          <option value="latest">🆕 Latest Release</option>
+          <option value="rating">⭐ Top Rated</option>
+          <option value="2026">📅 2026</option>
+          <option value="2025">📅 2025</option>
+          <option value="2024">📅 2024</option>
+          <option value="older">📅 Older</option>
+        </select>
+      </div>
+    </div>
+
+    <!-- Category Tabs -->
+    <div class="category-tabs">
+      <button class="tab-btn active" data-category="all">All</button>
+      <button class="tab-btn" data-category="hindi-dubbed">Hindi Dubbed</button>
+      <button class="tab-btn" data-category="series">Web Series</button>
+      <button class="tab-btn" data-category="south">South Special</button>
+      <button class="tab-btn" data-category="bollywood">Bollywood</button>
+      <button class="tab-btn" data-category="watchlist"><i class="fa-solid fa-heart"></i> Watchlist</button>
+    </div>
+
+    <!-- Media Cards Grid (2 Columns, Vertical Scroll) -->
+    <main class="media-grid" id="media-container">
+      <div class="loading-spinner"><i class="fa-solid fa-spinner fa-spin"></i> Loading Movies...</div>
+    </main>
+  </div>
+
+  <script src="app.js"></script>
+</body>
+</html>
