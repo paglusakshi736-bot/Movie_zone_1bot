@@ -1,5 +1,5 @@
 <!DOCTYPE html>
-<html lang="en">
+<html lang="hi">
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
@@ -37,6 +37,7 @@
       <div class="search-bar">
         <i class="fa-solid fa-magnifying-glass"></i>
         <input type="text" id="search-input" placeholder="Search movies, web series...">
+        <button id="clear-search" class="clear-btn" style="display: none;"><i class="fa-solid fa-xmark"></i></button>
       </div>
       <div class="filter-dropdown">
         <select id="sort-filter">
@@ -52,18 +53,39 @@
 
     <!-- Category Tabs -->
     <div class="category-tabs">
-      <button class="tab-btn active" data-category="all">All</button>
-      <button class="tab-btn" data-category="hindi-dubbed">Hindi Dubbed</button>
-      <button class="tab-btn" data-category="series">Web Series</button>
-      <button class="tab-btn" data-category="south">South Special</button>
-      <button class="tab-btn" data-category="bollywood">Bollywood</button>
-      <button class="tab-btn" data-category="watchlist"><i class="fa-solid fa-heart"></i> Watchlist</button>
+      <button class="tab-btn active cat-tab" data-category="all">All</button>
+      <button class="tab-btn cat-tab" data-category="hindi-dubbed">Hindi Dubbed</button>
+      <button class="tab-btn cat-tab" data-category="series">Web Series</button>
+      <button class="tab-btn cat-tab" data-category="south">South Special</button>
+      <button class="tab-btn cat-tab" data-category="bollywood">Bollywood</button>
+      <button class="tab-btn cat-tab" id="watchlist-toggle" data-category="watchlist"><i class="fa-solid fa-heart"></i> Watchlist</button>
     </div>
 
-    <!-- Media Cards Grid (2 Columns, Vertical Scroll) -->
-    <main class="media-grid" id="media-container">
+    <!-- Trending / Top 10 Section -->
+    <section class="section trending-section" id="trending-section" style="margin-top: 15px;">
+      <div class="section-title" style="display: flex; align-items: center; gap: 8px; font-size: 14px; font-weight: bold; margin-bottom: 8px; color: #ff334b;">
+        <i class="fa-solid fa-fire"></i>
+        <span>🔥 Trending Top 10</span>
+      </div>
+      <div class="trending-scroll" id="trending-slider">
+        <!-- टॉप 10 कार्ड्स यहाँ JS से लोड होंगे -->
+      </div>
+    </section>
+
+    <!-- Media Cards Grid (2 Columns) -->
+    <main class="media-grid" id="media-grid">
       <div class="loading-spinner"><i class="fa-solid fa-spinner fa-spin"></i> Loading Movies...</div>
     </main>
+
+    <!-- Details Modal (पॉपअप) -->
+    <div id="media-modal" class="modal">
+      <div class="modal-content">
+        <button class="modal-close" id="modal-close">&times;</button>
+        <div class="modal-body" id="modal-body">
+          <!-- मूवी विवरण यहाँ आएगा -->
+        </div>
+      </div>
+    </div>
   </div>
 
   <script src="app.js"></script>
