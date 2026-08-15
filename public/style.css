@@ -152,6 +152,13 @@ body {
   outline: none;
 }
 
+.clear-btn {
+  background: transparent;
+  border: none;
+  color: var(--text-muted);
+  cursor: pointer;
+}
+
 .filter-dropdown select {
   background: var(--bg-secondary);
   border: 1px solid var(--border-color);
@@ -196,11 +203,52 @@ body {
   border-color: var(--accent-red);
 }
 
-/* Grid & Cards */
+/* Trending Top 10 (Horizontal Slider) */
+.trending-scroll {
+  display: flex;
+  gap: 10px;
+  overflow-x: auto;
+  padding-bottom: 6px;
+  scrollbar-width: none;
+}
+
+.trending-scroll::-webkit-scrollbar {
+  display: none;
+}
+
+.trending-card {
+  min-width: 105px;
+  max-width: 105px;
+  position: relative;
+  cursor: pointer;
+}
+
+.trending-card img {
+  width: 100%;
+  height: 150px;
+  object-fit: cover;
+  border-radius: 8px;
+  border: 1px solid var(--border-color);
+}
+
+.rank-badge {
+  position: absolute;
+  top: 4px;
+  left: 4px;
+  background: rgba(229, 9, 20, 0.9);
+  color: #fff;
+  font-size: 10px;
+  font-weight: bold;
+  padding: 2px 6px;
+  border-radius: 4px;
+}
+
+/* Grid & Cards (2 Columns) */
 .media-grid {
   display: grid;
   grid-template-columns: repeat(2, 1fr);
   gap: 12px;
+  margin-top: 10px;
 }
 
 .media-card {
@@ -210,6 +258,7 @@ body {
   overflow: hidden;
   display: flex;
   flex-direction: column;
+  position: relative;
 }
 
 .poster-wrap {
@@ -282,7 +331,7 @@ body {
   margin-bottom: 8px;
 }
 
-.get-btn {
+.get-btn, .dl-btn {
   width: 100%;
   background: var(--accent-red);
   color: #fff;
@@ -292,10 +341,13 @@ body {
   font-weight: 700;
   font-size: 0.75rem;
   cursor: pointer;
+  text-decoration: none;
+  display: block;
+  text-align: center;
   transition: 0.2s;
 }
 
-.get-btn:hover, .get-btn:active {
+.get-btn:hover, .dl-btn:hover {
   background: var(--accent-hover);
 }
 
@@ -304,4 +356,39 @@ body {
   text-align: center;
   padding: 40px 0;
   color: var(--text-muted);
-  }
+}
+
+/* Modal Popup (Details View) */
+.modal {
+  display: none;
+  position: fixed;
+  top: 0; left: 0;
+  width: 100%; height: 100%;
+  background: rgba(0, 0, 0, 0.8);
+  z-index: 99;
+  justify-content: center;
+  align-items: flex-end;
+}
+
+.modal-content {
+  background: var(--bg-secondary);
+  width: 100%;
+  max-width: 600px;
+  border-radius: 16px 16px 0 0;
+  border-top: 1px solid var(--border-color);
+  padding: 18px;
+  position: relative;
+  max-height: 80vh;
+  overflow-y: auto;
+}
+
+.modal-close {
+  position: absolute;
+  top: 12px;
+  right: 16px;
+  background: transparent;
+  border: none;
+  color: var(--text-muted);
+  font-size: 24px;
+  cursor: pointer;
+}
