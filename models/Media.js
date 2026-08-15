@@ -1,11 +1,16 @@
 const mongoose = require('mongoose');
 
-const EpisodeSchema = new mongoose.Schema({
-  seasonNumber: { type: Number, default: 1 },
-  episodeNumber: { type: Number, required: true },
+const FileQualitySchema = new mongoose.Schema({
+  quality: { type: String, default: 'HD' }, // 480p, 720p, 1080p, 4K
   fileId: { type: String, required: true },
   fileName: { type: String, default: '' },
   fileSize: { type: String, default: '' }
+});
+
+const EpisodeSchema = new mongoose.Schema({
+  seasonNumber: { type: Number, default: 1 },
+  episodeNumber: { type: Number, required: true },
+  files: [FileQualitySchema]
 });
 
 const MediaSchema = new mongoose.Schema({
@@ -20,19 +25,17 @@ const MediaSchema = new mongoose.Schema({
   poster: { type: String, default: '' },
   language: { type: String, default: 'hi' },
   isDubbed: { type: Boolean, default: false },
-  
-  // डाउनलोड / व्यू काउंट (Trending & Top 10 के लिए)
+
+  // डाउनलोड / व्यू काउंट (Trending & Top 10)
   viewsCount: { type: Number, default: 0 },
   downloadsCount: { type: Number, default: 0 },
-  
-  // फ़ाइल डेटा (मूवी के लिए)
-  fileId: { type: String, default: null },
-  fileName: { type: String, default: '' },
-  fileSize: { type: String, default: '' },
-  
-  // वेब सीरीज़ के लिए एपिसोड्स लिस्ट
+
+  // मूवी के लिए मल्टी-क्वालिटी फाइल्स (480p, 720p, 1080p)
+  files: [FileQualitySchema],
+
+  // वेब सीरीज़ के एपिसोड्स लिस्ट
   episodes: [EpisodeSchema],
-  
+
   // ऑटो-ब्रॉडकास्ट ट्रैकिंग
   isBroadcasted: { type: Boolean, default: false },
   broadcastedAt: { type: Date, default: null }
