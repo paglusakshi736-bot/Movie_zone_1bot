@@ -5,6 +5,8 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
   <title>Movie Zone Mini App</title>
   <script src="https://telegram.org/js/telegram-web-app.js"></script>
+  <!-- Adgram Ad Script -->
+  <script src="https://adgram.io/js/adgram.min.js"></script>
   <link rel="stylesheet" href="style.css">
   <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
 </head>
@@ -67,23 +69,19 @@
         <i class="fa-solid fa-fire"></i>
         <span>🔥 Trending Top 10</span>
       </div>
-      <div class="trending-scroll" id="trending-slider">
-        <!-- टॉप 10 कार्ड्स यहाँ JS से लोड होंगे -->
-      </div>
+      <div class="trending-scroll" id="trending-slider"></div>
     </section>
 
-    <!-- Media Cards Grid (2 Columns) -->
+    <!-- Media Cards Grid -->
     <main class="media-grid" id="media-grid">
       <div class="loading-spinner"><i class="fa-solid fa-spinner fa-spin"></i> Loading Movies...</div>
     </main>
 
-    <!-- Details Modal (पॉपअप) -->
+    <!-- Details & In-App Video Player Modal -->
     <div id="media-modal" class="modal">
       <div class="modal-content">
         <button class="modal-close" id="modal-close">&times;</button>
-        <div class="modal-body" id="modal-body">
-          <!-- मूवी विवरण यहाँ आएगा -->
-        </div>
+        <div class="modal-body" id="modal-body"></div>
       </div>
     </div>
   </div>
