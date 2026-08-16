@@ -27,6 +27,16 @@ app.use(express.static('public'));
 
 const bot = new Telegraf(process.env.BOT_TOKEN);
 
+// मल्टीपल एडमिन चेक करने का हेल्पर फ़ंक्शन
+function checkIsAdmin(userId) {
+  if (!userId) return false;
+  const adminList = (process.env.ADMIN_ID || '')
+    .split(',')
+    .map(id => id.trim().replace(/['"]/g, ''))
+    .filter(Boolean);
+  return adminList.includes(String(userId));
+}
+
 // --- 1. MONGODB कनेक्शन ---
 mongoose.connect(process.env.MONGO_URI)
   .then(() => console.log('✅ MongoDB Database Connected Successfully!'))
@@ -39,12 +49,13 @@ app.get('/health', (req, res) => {
   res.status(200).send('OK');
 });
 
-// सभी मीडिया लिस्ट (सर्च, फ़िल्टर और टॉप 10 के लिए)
+// सभी मीडिया लिस्ट (सर्च, फ़िल्टर और मिनी ऐप लोड के लिए)
 app.get('/api/media', async (req, res) => {
   try {
     const media = await Media.find().sort({ createdAt: -1 });
-    res.json(media);
+    res.json(media || []);
   } catch (err) {
+    console.error('Error fetching media:', err.message);
     res.status(500).json({ error: err.message });
   }
 });
@@ -57,7 +68,6 @@ app.get('/api/stream/:id', async (req, res) => {
       return res.status(404).send('मीडिया नहीं मिला');
     }
 
-    // व्यू काउंट +1 करना
     await Media.findByIdAndUpdate(req.params.id, { $inc: { viewsCount: 1 } });
 
     const directUrl = await getTelegramDirectUrl(process.env.BOT_TOKEN, media.fileId);
@@ -147,8 +157,11 @@ bot.start(async (ctx) => {
   });
 });
 
-// /admin कमांड
+// /admin कमांड (Multiple Admins Supported)
 bot.command('admin', async (ctx) => {
+  if (!checkIsAdmin(ctx.from?.id)) {
+    return ctx.reply('⛔ आपके पास एडमिन पैनल का एक्सेस नहीं है।');
+  }
   showAdminPanel(ctx);
 });
 
@@ -156,6 +169,9 @@ bot.command('admin', async (ctx) => {
 bot.on('callback_query', async (ctx) => {
   const data = ctx.callbackQuery.data;
   if (data.startsWith('admin_') || data.startsWith('set_timer_')) {
+    if (!checkIsAdmin(ctx.from?.id)) {
+      return ctx.answerCbQuery('⛔ एक्सेस अस्वीकृत!', { show_alert: true });
+    }
     return handleAdminCallbacks(ctx);
   }
 });
@@ -196,10 +212,12 @@ async function sendMediaToUser(ctx, mediaId) {
   }
 }
 
-// ऑटो अपलोड और TMDb हैंडलर
+// ऑटो अपलोड और TMDb हैंडलर (Multiple Admins + Storage Channel Supported)
 bot.on(['video', 'document'], async (ctx) => {
-  const adminId = process.env.ADMIN_ID;
-  if (String(ctx.from?.id) !== String(adminId) && String(ctx.channelPost?.chat?.id) !== String(process.env.STORAGE_CHANNEL_ID)) {
+  const isSenderAdmin = checkIsAdmin(ctx.from?.id);
+  const isStorageChannel = String(ctx.channelPost?.chat?.id) === String(process.env.STORAGE_CHANNEL_ID);
+
+  if (!isSenderAdmin && !isStorageChannel) {
     return;
   }
 
