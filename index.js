@@ -1,358 +1,510 @@
-require('dotenv').config();
+const TelegramBot = require('node-telegram-bot-api');
+const mongoose = require('mongoose');
 const express = require('express');
 const cors = require('cors');
-const mongoose = require('mongoose');
-const { Telegraf } = require('telegraf');
+const axios = require('axios');
 
-// मॉडल्स
-const Media = require('./models/Media');
-const User = require('./models/User');
-const Settings = require('./models/Settings');
+const BOT_TOKEN = process.env.BOT_TOKEN;
+const MONGO_URI = process.env.MONGO_URI;
+const ADMIN_ID = process.env.ADMIN_ID;
 
-// यूटिलिटीज़ और हैंडलर्स
-const { fetchTMDbDetails } = require('./utils/tmdb');
-const { createShortLink } = require('./utils/shortener');
-const { postToChannel } = require('./utils/broadcaster');
-const { parseSeriesDetails } = require('./utils/seriesParser');
-const { scheduleAutoDelete } = require('./utils/autoDelete');
-const { extractQuality } = require('./utils/qualityParser');
-const { getTelegramDirectUrl } = require('./utils/streamEngine');
-const { processReferral, checkVipStatus } = require('./utils/vipReferral');
-const { showAdminPanel, handleAdminCallbacks } = require('./handlers/adminHandler');
-
+const bot = new TelegramBot(BOT_TOKEN, { polling: true });
 const app = express();
+
 app.use(cors());
 app.use(express.json());
-app.use(express.static('public'));
 
-const bot = new Telegraf(process.env.BOT_TOKEN);
+// ----------------- MONGODB SCHEMAS -----------------
+const userSchema = new mongoose.Schema({
+    userId: { type: String, unique: true },
+    username: String,
+    firstName: String,
+    joinedAt: { type: Date, default: Date.now }
+});
 
-// मल्टीपल एडमिन चेक करने का हेल्पर फ़ंक्शन
-function checkIsAdmin(userId) {
-  if (!userId) return false;
-  const adminList = (process.env.ADMIN_ID || '')
-    .split(',')
-    .map(id => id.trim().replace(/['"]/g, ''))
-    .filter(Boolean);
-  return adminList.includes(String(userId));
+const fileItemSchema = new mongoose.Schema({
+    label: String,
+    fileId: String,
+    fileType: String,
+    fileSize: String,
+    addedAt: { type: Date, default: Date.now }
+});
+
+const movieSchema = new mongoose.Schema({
+    title: { type: String, required: true, index: true },
+    thumbFileId: String,
+    files: [fileItemSchema],
+    updatedAt: { type: Date, default: Date.now }
+});
+
+const configSchema = new mongoose.Schema({
+    key: { type: String, unique: true },
+    value: mongoose.Schema.Types.Mixed
+});
+
+const User = mongoose.model('User', userSchema);
+const Movie = mongoose.model('Movie', movieSchema);
+const Config = mongoose.model('Config', configSchema);
+
+// Safe Polling Error Handler
+bot.on('polling_error', (error) => {
+    console.log('[Telegram Polling Error]:', error.message || error);
+});
+
+process.on('unhandledRejection', (reason) => {
+    console.log('[Unhandled Rejection]:', reason);
+});
+
+function isAdmin(userId) {
+    if (!userId) return false;
+    const adminList = ADMIN_ID ? ADMIN_ID.split(',').map(id => id.trim()) : [];
+    return adminList.includes(userId.toString());
 }
 
-// --- 1. MONGODB कनेक्शन ---
-mongoose.connect(process.env.MONGO_URI || process.env.MONGODB_URI)
-  .then(() => console.log('✅ MongoDB Database Connected Successfully!'))
-  .catch(err => console.error('❌ MongoDB Connection Error:', err.message));
+// ----------------- SUPER CLEANER (100% SINGLE CARD MERGER) -----------------
+function parseMediaInfo(rawText) {
+    if (!rawText) return { cleanTitle: 'Movie ' + new Date().toLocaleDateString('en-GB'), label: 'Standard' };
 
-// --- 2. मिनी ऐप (WEBAPP) API रूट्स ---
+    let text = rawText.split('\n')[0];
 
-// हेल्थ चेक रूट (Render Port Binding के लिए)
-app.get('/health', (req, res) => {
-  res.status(200).send('OK');
-});
+    let qualityMatch = text.match(/(480p|720p|1080p|2160p|4k|hd|sd)/i);
+    let quality = qualityMatch ? qualityMatch[0].toUpperCase() : '';
 
-// सभी मीडिया लिस्ट (सर्च, फ़िल्टर और मिनी ऐप लोड के लिए)
-app.get('/api/media', async (req, res) => {
-  try {
-    const media = await Media.find().sort({ createdAt: -1 });
-    res.json(media || []);
-  } catch (err) {
-    console.error('Error fetching media:', err.message);
-    res.status(500).json({ error: err.message });
-  }
-});
+    let codecMatch = text.match(/(hevc|x265|h[\s\._-]*265|x264|h[\s\._-]*264|10bit|hdr|ddp[\s\._-]*5[\s\._-]*1|5[\s\._-]*1|2[\s\._-]*0)/i);
+    let codecInfo = codecMatch ? codecMatch[0].replace(/[\s\._-]+/g, '').toUpperCase() : '';
 
-// इन-ऐप प्लेयर वीडियो स्ट्रीमिंग रूट
-app.get('/api/stream/:id', async (req, res) => {
-  try {
-    const media = await Media.findById(req.params.id);
-    const fileId = media?.fileId || media?.file_id;
-    if (!media || !fileId) {
-      return res.status(404).send('मीडिया नहीं मिला');
-    }
+    let epMatch = text.match(/(s\d+\s*e\d+|season\s*\d+|ep\s*\d+|episode\s*\d+|e\d+)/i);
+    let episode = epMatch ? epMatch[0].toUpperCase() : '';
 
-    await Media.findByIdAndUpdate(req.params.id, { $inc: { viewsCount: 1 } });
+    let labelParts = [];
+    if (episode) labelParts.push(episode);
+    if (quality) labelParts.push(quality);
+    if (codecInfo && !labelParts.includes(codecInfo)) labelParts.push(codecInfo);
+    let label = labelParts.length > 0 ? labelParts.join(' - ') : 'Standard Quality';
 
-    const directUrl = await getTelegramDirectUrl(process.env.BOT_TOKEN, fileId);
-    if (directUrl) {
-      res.redirect(directUrl);
-    } else {
-      res.status(500).send('स्ट्रीम लिंक जनरेट नहीं हो सका');
-    }
-  } catch (err) {
-    res.status(500).send(err.message);
-  }
-});
+    let clean = text
+        .replace(/\[.*?\]/g, ' ')
+        .replace(/\(.*?\)/g, ' ')
+        .replace(/(https?:\/\/[^\s]+|t\.me\/[^\s]+|www\.[^\s]+|@\w+)/gi, ' ')
+        .replace(/\.(mp4|mkv|avi|mov|zip|rar)/gi, ' ')
+        .replace(/(480p|720p|1080p|2160p|4k|webdl|web-dl|webrip|bluray|hdrip|dvdrip|predvd|hdtc|esub|subs?|subtitles?)/gi, ' ')
+        .replace(/(x264|x265|hevc|h[\s\._-]*264|h[\s\._-]*265|avc|10bit|hdr|dv|aac2[\s\._-]*0|aac|amzn|ddp5[\s\._-]*1|ddp2[\s\._-]*0|ddp|dd\+|hindi|english|telugu|tamil|korean|dubbed|multi|paramount|official|hd|full|mkv)/gi, ' ')
+        .replace(/\b(2[\s\._-]*0|5[\s\._-]*1|7[\s\._-]*1)\b/gi, ' ')
+        .replace(/\b265\b|\b264\b/gi, ' ')
+        .replace(/\b[a-zA-Z]\b/g, ' ')
+        .replace(/[^\w\s]/gi, ' ')
+        .replace(/\s+/g, ' ')
+        .trim();
 
-// क्रोम फ़ास्ट डाउनलोड रूट
-app.get('/api/fast-download/:id', async (req, res) => {
-  try {
-    const media = await Media.findById(req.params.id);
-    const fileId = media?.fileId || media?.file_id;
-    if (!media || !fileId) {
-      return res.status(404).send('फ़ाइल नहीं मिली');
-    }
+    if (clean.length < 2) clean = 'Movie ' + new Date().toLocaleDateString('en-GB');
+    clean = clean.split(' ').map(w => w.charAt(0).toUpperCase() + w.slice(1).toLowerCase()).join(' ');
 
-    await Media.findByIdAndUpdate(req.params.id, { $inc: { downloadsCount: 1 } });
-
-    const directUrl = await getTelegramDirectUrl(process.env.BOT_TOKEN, fileId);
-    if (directUrl) {
-      res.redirect(directUrl);
-    } else {
-      res.status(500).send('डाउनलोड लिंक उपलब्ध नहीं है');
-    }
-  } catch (err) {
-    res.status(500).send(err.message);
-  }
-});
-
-// --- 3. TELEGRAM BOT कमांड्स & लॉजिक ---
-
-// /start कमांड (रेफ़रल ट्रैकिंग और डीप-लिंकिंग)
-bot.start(async (ctx) => {
-  const userId = String(ctx.from.id);
-  const payload = ctx.startPayload;
-
-  try {
-    await User.findOneAndUpdate(
-      { userId: Number(userId) },
-      { 
-        $set: {
-          userId: Number(userId),
-          telegramId: userId,
-          username: ctx.from.username || '',
-          firstName: ctx.from.first_name || ''
-        }
-      },
-      { upsert: true, new: true, setDefaultsOnInsert: true }
-    );
-  } catch (uErr) {
-    console.error('User save error:', uErr.message);
-  }
-
-  // रेफ़रल हैंडलिंग
-  if (payload && payload.startsWith('ref_')) {
-    const referrerId = payload.replace('ref_', '');
-    if (typeof processReferral === 'function') {
-      await processReferral(userId, referrerId);
-    }
-  }
-
-  // डायरेक्ट मीडिया फ़ाइल रिक्वेस्ट
-  if (payload && payload.startsWith('media_')) {
-    const mediaId = payload.replace('media_', '');
-    return sendMediaToUser(ctx, mediaId);
-  }
-
-  const webAppUrl = process.env.WEBAPP_URL || process.env.RENDER_EXTERNAL_URL || 'https://movie-zone-1bot.onrender.com';
-  const refLink = `https://t.me/${ctx.botInfo.username}?start=ref_${userId}`;
-
-  const welcomeText = `
-👋 <b>नमस्ते ${ctx.from.first_name}!</b>
-
-🎬 <b>Movie Zone Mini App</b> में आपका स्वागत है!
-यहाँ आपको मिलेंगी सभी लेटेस्ट मूवीज़, वेब सीरीज़ और साउथ स्पेशल फ़िल्में।
-
-🔗 <b>आपका रेफ़रल लिंक:</b>
-<code>${refLink}</code>
-<i>(5 दोस्तों को शेयर करें और 7 दिन के लिए फ्री VIP पाएं!)</i>`;
-
-  const keyboard = [
-    [{ text: '🚀 Open Movie Mini App', web_app: { url: webAppUrl } }],
-    [
-      { text: '📢 Updates Channel', url: process.env.UPDATES_CHANNEL || 'https://t.me' },
-      { text: '💬 Discussion', url: process.env.DISCUSSION_GRP || 'https://t.me' }
-    ]
-  ];
-
-  ctx.reply(welcomeText, {
-    parse_mode: 'HTML',
-    reply_markup: { inline_keyboard: keyboard }
-  });
-});
-
-// /admin कमांड (Multiple Admins Supported)
-bot.command('admin', async (ctx) => {
-  if (!checkIsAdmin(ctx.from?.id)) {
-    return ctx.reply('⛔ आपके पास एडमिन पैनल का एक्सेस नहीं है।');
-  }
-  if (typeof showAdminPanel === 'function') {
-    showAdminPanel(ctx);
-  }
-});
-
-// एडमिन कॉलबैक क्वेरी हैंडलर
-bot.on('callback_query', async (ctx) => {
-  const data = ctx.callbackQuery.data;
-  if (data.startsWith('admin_') || data.startsWith('set_timer_')) {
-    if (!checkIsAdmin(ctx.from?.id)) {
-      return ctx.answerCbQuery('⛔ एक्सेस अस्वीकृत!', { show_alert: true });
-    }
-    if (typeof handleAdminCallbacks === 'function') {
-      return handleAdminCallbacks(ctx);
-    }
-  }
-});
-
-// मीडिया फ़ाइल भेजने का फ़ंक्शन
-async function sendMediaToUser(ctx, mediaId) {
-  try {
-    const media = await Media.findById(mediaId);
-    if (!media) return ctx.reply('❌ यह फ़ाइल उपलब्ध नहीं है या हटा दी गई है।');
-
-    const fileId = media.fileId || media.file_id;
-    if (!fileId) return ctx.reply('❌ डेटाबेस में फ़ाइल आईडी नहीं मिली।');
-
-    const isVip = typeof checkVipStatus === 'function' ? await checkVipStatus(ctx.from.id) : false;
-    const settings = await Settings.findOne() || {};
-
-    if (settings.shortenerEnabled && !isVip && typeof createShortLink === 'function') {
-      const originalBotLink = `https://t.me/${ctx.botInfo.username}?start=media_${media._id}`;
-      const shortUrl = await createShortLink(originalBotLink);
-
-      return ctx.reply(
-        `🔒 <b>फ़ाइल अनलॉक करने के लिए नीचे दिए गए लिंक पर क्लिक करें:</b>\n\n👉 <a href="${shortUrl}">Click Here to Unlock</a>`,
-        {
-          parse_mode: 'HTML',
-          disable_web_page_preview: true
-        }
-      );
-    }
-
-    const captionText = `🎬 <b>${media.title}</b> ${media.year ? `(${media.year})` : ''}\n⭐ <b>Rating:</b> ${media.rating || 'N/A'}`;
-    let sentMsg;
-
-    // 1. पहले वीडियो के रूप में भेजने का प्रयास
-    try {
-      sentMsg = await ctx.replyWithVideo(fileId, {
-        caption: captionText,
-        parse_mode: 'HTML'
-      });
-    } catch (vErr) {
-      // 2. अगर वीडियो फेल हुआ तो डॉक्यूमेंट के रूप में प्रयास
-      try {
-        sentMsg = await ctx.replyWithDocument(fileId, {
-          caption: captionText,
-          parse_mode: 'HTML'
-        });
-      } catch (dErr) {
-        console.error('Document send also failed:', dErr.message);
-      }
-    }
-
-    await Media.findByIdAndUpdate(mediaId, { $inc: { downloadsCount: 1 } });
-
-    if (settings.autoDeleteMinutes && settings.autoDeleteMinutes > 0 && sentMsg && typeof scheduleAutoDelete === 'function') {
-      scheduleAutoDelete(bot, ctx.chat.id, sentMsg.message_id, settings.autoDeleteMinutes);
-    }
-  } catch (err) {
-    console.error('Error sending media:', err.message);
-    ctx.reply('❌ फ़ाइल भेजने में समस्या आई!');
-  }
+    return { cleanTitle: clean, label };
 }
 
-// ऑटो अपलोड और TMDb/फ़ॉलबैक हैंडलर
-bot.on(['video', 'document'], async (ctx) => {
-  try {
-    const isSenderAdmin = checkIsAdmin(ctx.from?.id);
-    const isStorageChannel = String(ctx.channelPost?.chat?.id) === String(process.env.STORAGE_CHANNEL_ID || '');
+function formatBytes(bytes) {
+    if (!bytes || bytes === 0) return '';
+    const sizes = ['Bytes', 'KB', 'MB', 'GB'];
+    const i = Math.floor(Math.log(bytes) / Math.log(1024));
+    return (bytes / Math.pow(1024, i)).toFixed(1) + ' ' + sizes[i];
+}
 
-    if (!isSenderAdmin && !isStorageChannel) {
-      return;
-    }
-
-    const doc = ctx.message?.document || ctx.message?.video || ctx.channelPost?.document || ctx.channelPost?.video;
-    if (!doc) return;
-
-    const rawName = doc.file_name || ctx.message?.caption || ctx.channelPost?.caption || 'New Video';
-    const fileId = doc.file_id;
-
-    if (ctx.chat?.type === 'private') {
-      ctx.reply(`⏳ फ़ाइल प्रोसेस हो रही है: <b>${rawName}</b>`, { parse_mode: 'HTML' });
-    }
-
-    // 1. नाम साफ़ करना
-    const cleanTitle = rawName
-      .replace(/\.[^/.]+$/, "")
-      .replace(/[\._]/g, ' ')
-      .replace(/\b(480p|720p|1080p|2160p|4k|hevc|hdrip|webrip|bluray|x264|x265|hindi|dual audio)\b/gi, '')
-      .trim();
-
-    // 2. वीडियो का टेलीग्राम थंबनेल चेक करना
-    let posterUrl = '';
-    const thumbObj = doc.thumb || doc.thumbnail;
-    if (thumbObj?.file_id) {
-      try {
-        const thumbLink = await ctx.telegram.getFileLink(thumbObj.file_id);
-        posterUrl = thumbLink.href;
-      } catch (tErr) {
-        console.error('Thumb error:', tErr.message);
-      }
-    }
-
-    // 3. TMDb डेटा
-    let tmdbData = {};
+async function checkMemberStatus(chatIdentifier, userId) {
+    if (!chatIdentifier) return true;
     try {
-      if (typeof fetchTMDbDetails === 'function') {
-        const seriesInfo = typeof parseSeriesDetails === 'function' ? parseSeriesDetails(rawName) : { isSeries: false, cleanTitle: cleanTitle };
-        tmdbData = await fetchTMDbDetails(seriesInfo.isSeries ? seriesInfo.cleanTitle : cleanTitle);
-      }
+        const member = await bot.getChatMember(chatIdentifier, userId);
+        return ['creator', 'administrator', 'member', 'restricted'].includes(member.status);
     } catch (e) {
-      console.log('TMDB not found, using fallback.');
+        return true;
+    }
+}
+
+// ----------------- ADVANCED PAGINATED & SEARCH DELETE SYSTEM -----------------
+const adminDeleteSessions = {};
+const PAGE_LIMIT = 8; // Ek page par 8 movies dikhengi
+
+async function renderDeletePanel(chatId, messageId = null, page = 1, searchQuery = '') {
+    const query = searchQuery ? { title: new RegExp(searchQuery, 'i') } : {};
+    const totalMovies = await Movie.countDocuments(query);
+    const totalPages = Math.ceil(totalMovies / PAGE_LIMIT) || 1;
+
+    if (page > totalPages) page = totalPages;
+    if (page < 1) page = 1;
+
+    const movies = await Movie.find(query)
+        .sort({ updatedAt: -1 })
+        .skip((page - 1) * PAGE_LIMIT)
+        .limit(PAGE_LIMIT);
+
+    if (!adminDeleteSessions[chatId]) {
+        adminDeleteSessions[chatId] = { selected: [], page: 1, searchQuery: '' };
+    }
+    adminDeleteSessions[chatId].page = page;
+    adminDeleteSessions[chatId].searchQuery = searchQuery;
+
+    const selectedIds = adminDeleteSessions[chatId].selected;
+
+    if (totalMovies === 0) {
+        const noText = searchQuery ? `❌ "${searchQuery}" नाम से कोई मूवी नहीं मिली।` : "डेटाबेस में कोई मूवी नहीं है।";
+        if (messageId) return bot.editMessageText(noText, { chat_id: chatId, message_id: messageId });
+        return bot.sendMessage(chatId, noText);
     }
 
-    // 4. फ़ाइनल डेटा (TMDB -> Telegram Thumb -> Auto Poster)
-    const finalTitle = tmdbData?.title || cleanTitle || rawName;
-    const finalPoster = tmdbData?.poster || posterUrl || `https://via.placeholder.com/300x450/1e293b/ffffff?text=${encodeURIComponent(finalTitle.substring(0, 20))}`;
-    const quality = typeof extractQuality === 'function' ? extractQuality(rawName) : 'HD';
-
-    const newMedia = new Media({
-      title: finalTitle,
-      cleanTitle: finalTitle.toLowerCase().trim(),
-      type: tmdbData?.type || (rawName.toLowerCase().includes('s0') || rawName.toLowerCase().includes('season') ? 'series' : 'movie'),
-      fileId: fileId,
-      file_id: fileId,
-      quality: quality,
-      poster: finalPoster,
-      rating: tmdbData?.rating || '8.0',
-      year: tmdbData?.year || new Date().getFullYear().toString(),
-      overview: tmdbData?.overview || `${finalTitle} फ़ाइल अब Movie Zone पर उपलब्ध है।`,
-      genres: tmdbData?.genres || ['Entertainment']
+    // Movie Checkbox Buttons
+    let inline_keyboard = movies.map(m => {
+        const isSelected = selectedIds.includes(m._id.toString());
+        return [{
+            text: `${isSelected ? '✅' : '⬜'} ${m.title} (${m.files ? m.files.length : 1})`,
+            callback_data: `toggle_${m._id}`
+        }];
     });
 
-    await newMedia.save();
-
-    // ब्रॉडकास्ट
-    const settings = await Settings.findOne() || {};
-    if (settings.broadcastChannelId && typeof postToChannel === 'function') {
-      await postToChannel(bot, settings.broadcastChannelId, newMedia, ctx.botInfo?.username);
+    // Pagination Navigation Row
+    let navRow = [];
+    if (page > 1) {
+        navRow.push({ text: `⬅️ Back`, callback_data: `page_${page - 1}` });
     }
-
-    if (ctx.chat?.type === 'private') {
-      ctx.reply(`✅ <b>${finalTitle}</b> डेटाबेस में सेव हो गई!`, { parse_mode: 'HTML' });
+    navRow.push({ text: `📄 ${page}/${totalPages}`, callback_data: `noop` });
+    if (page < totalPages) {
+        navRow.push({ text: `Next ➡️`, callback_data: `page_${page + 1}` });
     }
-  } catch (uploadErr) {
-    console.error('Upload Error:', uploadErr.message);
-  }
+    inline_keyboard.push(navRow);
+
+    // Action Row (Delete / Cancel)
+    inline_keyboard.push([
+        { text: `🗑️ Delete Selected (${selectedIds.length})`, callback_data: `confirm_bulk_del` },
+        { text: `❌ Cancel`, callback_data: `cancel_del` }
+    ]);
+
+    let text = `⚙️ *मल्टी-सेलेक्ट डिलीट पैनल*\n`;
+    if (searchQuery) text += `🔍 *सर्च फ़िल्टर:* \`${searchQuery}\`\n`;
+    text += `📊 *कुल मूवीज़:* ${totalMovies} (Page ${page}/${totalPages})\n\nमूवीज़ पर क्लिक करके टिक (✅) लगाएं, फिर नीचे *Delete Selected* दबाएं:`;
+
+    if (messageId) {
+        await bot.editMessageText(text, { chat_id: chatId, message_id: messageId, parse_mode: 'Markdown', reply_markup: { inline_keyboard } });
+    } else {
+        const sent = await bot.sendMessage(chatId, text, { parse_mode: 'Markdown', reply_markup: { inline_keyboard } });
+        adminDeleteSessions[chatId].messageId = sent.message_id;
+    }
+}
+
+// ----------------- ADMIN COMMANDS -----------------
+bot.onText(/\/start/, async (msg) => {
+    try {
+        await User.findOneAndUpdate(
+            { userId: msg.from.id.toString() },
+            { userId: msg.from.id.toString(), username: msg.from.username || '', firstName: msg.from.first_name || '' },
+            { upsert: true, new: true }
+        );
+        bot.sendMessage(msg.chat.id, `👋 नमस्ते ${msg.from.first_name || 'दोस्त'}!\n\n🍿 हमारी Movie WebApp खोलने के लिए नीचे दिए गए बटन पर क्लिक करें।`);
+    } catch (e) {}
 });
 
-// --- 4. सर्वर शुरू करना (Render 0.0.0.0 Binding Fix) ---
+bot.onText(/\/stats/, async (msg) => {
+    if (!isAdmin(msg.from.id)) return;
+    try {
+        const totalUsers = await User.countDocuments();
+        const totalMovies = await Movie.countDocuments();
+        const allMovies = await Movie.find();
+        const totalFiles = allMovies.reduce((sum, m) => sum + (m.files ? m.files.length : 0), 0);
+
+        bot.sendMessage(msg.chat.id, `📊 *लाइव स्टेटिस्टिक्स*\n\n👥 *कुल यूज़र्स:* ${totalUsers}\n🎬 *कुल मूवी कार्ड्स:* ${totalMovies}\n📂 *कुल फाइल्स:* ${totalFiles}`, { parse_mode: 'Markdown' });
+    } catch (e) { bot.sendMessage(msg.chat.id, "❌ एरर: " + e.message); }
+});
+
+bot.onText(/\/broadcast (.+)/, async (msg, match) => {
+    if (!isAdmin(msg.from.id)) return;
+    const textToSend = match[1];
+    try {
+        const users = await User.find();
+        bot.sendMessage(msg.chat.id, `📢 ${users.length} यूज़र्स को ब्रॉडकास्ट भेजा जा रहा है...`);
+        let success = 0;
+        for (const u of users) {
+            try {
+                await bot.sendMessage(u.userId, textToSend);
+                success++;
+                await new Promise(r => setTimeout(r, 40));
+            } catch (err) {}
+        }
+        bot.sendMessage(msg.chat.id, `✅ ब्रॉडकास्ट पूरा हुआ! सफलता: ${success}/${users.length}`);
+    } catch (e) { bot.sendMessage(msg.chat.id, "❌ एरर: " + e.message); }
+});
+
+// Manage / Delete with optional search (e.g. /manage or /manage Prey)
+bot.onText(/\/(manage|delete)(?:\s+(.+))?/, async (msg, match) => {
+    if (!isAdmin(msg.from.id)) return;
+    const searchQuery = match[2] ? match[2].trim() : '';
+    adminDeleteSessions[msg.chat.id] = { selected: [], page: 1, searchQuery };
+    await renderDeletePanel(msg.chat.id, null, 1, searchQuery);
+});
+
+bot.on('callback_query', async (query) => {
+    const userId = query.from.id;
+    const chatId = query.message.chat.id;
+    const messageId = query.message.message_id;
+    const data = query.data;
+
+    if (!isAdmin(userId)) return bot.answerCallbackQuery(query.id, { text: "❌ एक्सेस डिनाइड!", show_alert: true });
+    if (!adminDeleteSessions[chatId]) adminDeleteSessions[chatId] = { selected: [], page: 1, searchQuery: '' };
+
+    const session = adminDeleteSessions[chatId];
+
+    if (data === 'noop') {
+        return bot.answerCallbackQuery(query.id);
+    } else if (data.startsWith('page_')) {
+        const newPage = parseInt(data.replace('page_', ''));
+        session.page = newPage;
+        await renderDeletePanel(chatId, messageId, newPage, session.searchQuery);
+        await bot.answerCallbackQuery(query.id);
+    } else if (data.startsWith('toggle_')) {
+        const movieId = data.replace('toggle_', '');
+        if (session.selected.includes(movieId)) {
+            session.selected = session.selected.filter(id => id !== movieId);
+        } else {
+            session.selected.push(movieId);
+        }
+        await renderDeletePanel(chatId, messageId, session.page, session.searchQuery);
+        await bot.answerCallbackQuery(query.id);
+    } else if (data === 'confirm_bulk_del') {
+        if (session.selected.length === 0) {
+            return bot.answerCallbackQuery(query.id, { text: "⚠️ कृपया पहले मूवी सेलेक्ट करें!", show_alert: true });
+        }
+
+        try {
+            const result = await Movie.deleteMany({ _id: { $in: session.selected } });
+            session.selected = [];
+            await bot.answerCallbackQuery(query.id, { text: `✅ ${result.deletedCount} मूवीज़ डिलीट!` });
+            await bot.editMessageText(`🗑️ *सफलता:* कुल **${result.deletedCount}** मूवीज़ हटा दी गईं।`, { chat_id: chatId, message_id: messageId, parse_mode: 'Markdown' });
+        } catch (err) {
+            bot.answerCallbackQuery(query.id, { text: "एरर: " + err.message });
+        }
+    } else if (data === 'cancel_del') {
+        delete adminDeleteSessions[chatId];
+        await bot.editMessageText("❌ डिलीट ऑपरेशन रद्द।", { chat_id: chatId, message_id: messageId });
+        await bot.answerCallbackQuery(query.id);
+    }
+});
+
+bot.onText(/\/rename (.+)/, async (msg, match) => {
+    if (!isAdmin(msg.from.id)) return;
+    const parts = match[1].split('=');
+    if (parts.length !== 2) return bot.sendMessage(msg.chat.id, "⚠️ तरीका: `/rename Purana = Naya`", { parse_mode: 'Markdown' });
+
+    try {
+        const movie = await Movie.findOneAndUpdate(
+            { title: new RegExp(`^${parts[0].trim()}$`, 'i') },
+            { title: parts[1].trim() },
+            { new: true }
+        );
+        if (movie) bot.sendMessage(msg.chat.id, `✅ नाम बदलकर *"${movie.title}"* कर दिया गया!`, { parse_mode: 'Markdown' });
+        else bot.sendMessage(msg.chat.id, `❌ मूवी नहीं मिली।`);
+    } catch (e) { bot.sendMessage(msg.chat.id, "❌ एरर: " + e.message); }
+});
+
+bot.on('photo', async (msg) => {
+    if (!isAdmin(msg.from.id)) return;
+    if (msg.caption && msg.caption.startsWith('/setposter')) {
+        const movieName = msg.caption.replace('/setposter', '').trim();
+        const photoId = msg.photo[msg.photo.length - 1].file_id;
+        try {
+            const movie = await Movie.findOneAndUpdate(
+                { title: new RegExp(`^${movieName}$`, 'i') },
+                { thumbFileId: photoId },
+                { new: true }
+            );
+            if (movie) bot.sendMessage(msg.chat.id, `✅ *"${movie.title}"* का पोस्टर बदल दिया गया!`, { parse_mode: 'Markdown' });
+            else bot.sendMessage(msg.chat.id, `❌ मूवी नहीं मिली।`);
+        } catch (e) { bot.sendMessage(msg.chat.id, "❌ एरर: " + e.message); }
+    }
+});
+
+bot.onText(/\/forcesub (on|off)/i, async (msg, match) => {
+    if (!isAdmin(msg.from.id)) return;
+    const status = match[1].toLowerCase() === 'on';
+    try {
+        await Config.findOneAndUpdate({ key: 'forcesub_enabled' }, { value: status }, { upsert: true });
+        bot.sendMessage(msg.chat.id, `🔒 Force Sub: *${status ? 'चालू (ON)' : 'बंद (OFF)'}*`, { parse_mode: 'Markdown' });
+    } catch (e) { bot.sendMessage(msg.chat.id, "❌ एरर: " + e.message); }
+});
+
+bot.onText(/\/setchannel (.+)/, async (msg, match) => {
+    if (!isAdmin(msg.from.id)) return;
+    try {
+        await Config.findOneAndUpdate({ key: 'forcesub_channel' }, { value: match[1].trim() }, { upsert: true });
+        bot.sendMessage(msg.chat.id, `📢 चैनल सेट: \`${match[1].trim()}\``, { parse_mode: 'Markdown' });
+    } catch (e) { bot.sendMessage(msg.chat.id, "❌ एरर: " + e.message); }
+});
+
+bot.onText(/\/setgroup (.+)/, async (msg, match) => {
+    if (!isAdmin(msg.from.id)) return;
+    try {
+        await Config.findOneAndUpdate({ key: 'forcesub_group' }, { value: match[1].trim() }, { upsert: true });
+        bot.sendMessage(msg.chat.id, `💬 ग्रुप सेट: \`${match[1].trim()}\``, { parse_mode: 'Markdown' });
+    } catch (e) { bot.sendMessage(msg.chat.id, "❌ एरर: " + e.message); }
+});
+
+bot.onText(/\/shortener (on|off)/i, async (msg, match) => {
+    if (!isAdmin(msg.from.id)) return;
+    const status = match[1].toLowerCase() === 'on';
+    try {
+        await Config.findOneAndUpdate({ key: 'shortener_enabled' }, { value: status }, { upsert: true });
+        bot.sendMessage(msg.chat.id, `🔗 शॉर्टनर: *${status ? 'चालू (ON)' : 'बंद (OFF)'}*`, { parse_mode: 'Markdown' });
+    } catch (e) { bot.sendMessage(msg.chat.id, "❌ एरर: " + e.message); }
+});
+
+bot.onText(/\/setshortener (.+)/, async (msg, match) => {
+    if (!isAdmin(msg.from.id)) return;
+    const input = match[1];
+    const domainMatch = input.match(/domain=([^\s]+)/i);
+    const apiMatch = input.match(/api=([^\s]+)/i);
+    if (!domainMatch || !apiMatch) return bot.sendMessage(msg.chat.id, "⚠️ तरीका: `/setshortener domain=gplinks.in api=YOUR_API_KEY`", { parse_mode: 'Markdown' });
+
+    try {
+        await Config.findOneAndUpdate({ key: 'shortener_domain' }, { value: domainMatch[1] }, { upsert: true });
+        await Config.findOneAndUpdate({ key: 'shortener_api' }, { value: apiMatch[1] }, { upsert: true });
+        bot.sendMessage(msg.chat.id, `✅ शॉर्टनर सेटिंग्स सेव हुईं!`, { parse_mode: 'Markdown' });
+    } catch (e) { bot.sendMessage(msg.chat.id, "❌ एरर: " + e.message); }
+});
+
+// ----------------- QUEUED BOT UPLOAD LISTENER (NO DUPLICATES) -----------------
+let uploadQueue = Promise.resolve();
+
+bot.on('message', (msg) => {
+    if (msg.text && msg.text.startsWith('/')) return;
+    if (msg.photo && msg.caption && msg.caption.startsWith('/setposter')) return;
+
+    const userId = msg.from ? msg.from.id.toString() : '';
+    if (!isAdmin(userId)) return;
+
+    const file = msg.video || msg.document;
+    if (!file) return;
+
+    uploadQueue = uploadQueue.then(async () => {
+        let rawInput = msg.caption || file.file_name || '';
+        const { cleanTitle, label } = parseMediaInfo(rawInput);
+
+        const fileId = file.file_id;
+        const fileType = msg.video ? 'video' : 'document';
+        const fileSize = formatBytes(file.file_size);
+        let thumbFileId = file.thumbnail ? file.thumbnail.file_id : null;
+
+        try {
+            let movie = await Movie.findOne({ title: new RegExp(`^${cleanTitle}$`, 'i') });
+            let finalLabel = label;
+            if (fileSize) finalLabel += ` (${fileSize})`;
+
+            if (movie) {
+                const countSameLabel = movie.files.filter(f => f.label.startsWith(label)).length;
+                if (countSameLabel > 0) finalLabel += ` [Option ${countSameLabel + 1}]`;
+
+                movie.files.push({ label: finalLabel, fileId, fileType, fileSize });
+                if (thumbFileId && !movie.thumbFileId) movie.thumbFileId = thumbFileId;
+                movie.updatedAt = new Date();
+                await movie.save();
+
+                await bot.sendMessage(msg.chat.id, `✅ *मौजूदा कार्ड में नया वर्ज़न जोड़ा गया!*\n\n🎬 *मूवी:* ${movie.title}\n📦 *क्वालिटी:* ${finalLabel}\n📂 *कुल फाइल्स:* ${movie.files.length}`, { parse_mode: 'Markdown' });
+            } else {
+                movie = new Movie({
+                    title: cleanTitle,
+                    thumbFileId,
+                    files: [{ label: finalLabel, fileId, fileType, fileSize }]
+                });
+                await movie.save();
+
+                await bot.sendMessage(msg.chat.id, `✅ *नया मूवी कार्ड बना!* \n\n🎬 *मूवी:* ${cleanTitle}\n📦 *क्वालिटी:* ${finalLabel}`, { parse_mode: 'Markdown' });
+            }
+        } catch (err) {
+            await bot.sendMessage(msg.chat.id, "❌ एरर: " + err.message);
+        }
+    });
+});
+
+// ----------------- API ENDPOINTS -----------------
+app.get('/api/movies', async (req, res) => {
+    try {
+        const movies = await Movie.find().sort({ updatedAt: -1 });
+        res.json(movies);
+    } catch (err) { res.status(500).json({ error: err.message }); }
+});
+
+app.get('/api/thumb/:fileId', async (req, res) => {
+    try {
+        const fileLink = await bot.getFileLink(req.params.fileId);
+        res.redirect(fileLink);
+    } catch (err) { res.status(404).send('Not Found'); }
+});
+
+app.post('/api/send-file', async (req, res) => {
+    const { fileId, fileType, movieTitle, label, chatId } = req.body;
+    try {
+        const forceSubCfg = await Config.findOne({ key: 'forcesub_enabled' });
+        if (forceSubCfg && forceSubCfg.value === true) {
+            const channelCfg = await Config.findOne({ key: 'forcesub_channel' });
+            const groupCfg = await Config.findOne({ key: 'forcesub_group' });
+
+            const channelJoined = channelCfg ? await checkMemberStatus(channelCfg.value, chatId) : true;
+            const groupJoined = groupCfg ? await checkMemberStatus(groupCfg.value, chatId) : true;
+
+            if (!channelJoined || !groupJoined) {
+                return res.status(403).json({
+                    success: false,
+                    forceSubRequired: true,
+                    channel: channelJoined ? null : channelCfg?.value,
+                    group: groupJoined ? null : groupCfg?.value
+                });
+            }
+        }
+
+        const shortConfig = await Config.findOne({ key: 'shortener_enabled' });
+        if (shortConfig && shortConfig.value === true) {
+            const domainCfg = await Config.findOne({ key: 'shortener_domain' });
+            const apiCfg = await Config.findOne({ key: 'shortener_api' });
+
+            if (domainCfg && apiCfg) {
+                const me = await bot.getMe();
+                const targetUrl = `https://t.me/${me.username}?start=file_${fileId}`;
+                const apiRes = await axios.get(`https://${domainCfg.value}/api?api=${apiCfg.value}&url=${encodeURIComponent(targetUrl)}`);
+                if (apiRes.data && apiRes.data.shortenedUrl) {
+                    await bot.sendMessage(chatId, `🔐 *आपकी डाउनलोड लिंक तैयार है:*\n\n[यहाँ क्लिक करके अनलॉक करें](${apiRes.data.shortenedUrl})`, { parse_mode: 'Markdown' });
+                    return res.json({ success: true, short: true });
+                }
+            }
+        }
+
+        const captionText = `🎬 *${movieTitle}*\n📌 *क्वालिटी:* ${label}\n\n⚠️ *नोट:* यह फ़ाइल **10 मिनट** में डिलीट हो जाएगी। इसे तुरंत *Saved Messages* में फॉरवर्ड कर लें!`;
+
+        let sentMsg = fileType === 'video' 
+            ? await bot.sendVideo(chatId, fileId, { caption: captionText, parse_mode: 'Markdown' })
+            : await bot.sendDocument(chatId, fileId, { caption: captionText, parse_mode: 'Markdown' });
+
+        res.json({ success: true });
+        setTimeout(() => bot.deleteMessage(chatId, sentMsg.message_id).catch(() => {}), 10 * 60 * 1000);
+    } catch (err) { res.status(500).json({ error: err.message }); }
+});
+
+// ----------------- SECURE SERVER STARTUP -----------------
 const PORT = process.env.PORT || 10000;
 
-app.listen(PORT, '0.0.0.0', async () => {
-  console.log(`🚀 Web Server is running on port ${PORT}`);
-  
-  try {
-    await bot.launch();
-    console.log('🤖 Telegram Bot Engine is Live!');
-  } catch (err) {
-    console.error('Bot launch error:', err.message);
-  }
-});
+mongoose.connect(MONGO_URI)
+    .then(async () => {
+        console.log('✅ Connected to MongoDB Successfully');
+        
+        bot.setMyCommands([
+            { command: 'start', description: 'Open Movie Store' },
+            { command: 'stats', description: 'View bot statistics' },
+            { command: 'manage', description: 'Multi-Select Delete movies (Supports pages & search)' },
+            { command: 'forcesub', description: 'Enable/Disable Join Lock' },
+            { command: 'setchannel', description: 'Set Channel for Join Lock' },
+            { command: 'setgroup', description: 'Set Group for Join Lock' },
+            { command: 'shortener', description: 'Enable/Disable Shortener' },
+            { command: 'setshortener', description: 'Set Shortener Domain & API' },
+            { command: 'broadcast', description: 'Send message to all users' }
+        ]).catch(() => {});
 
-// सुरक्षित शटडाउन (बिना क्रैश हुए)
-process.once('SIGINT', () => {
-  try { bot.stop('SIGINT'); } catch (e) {}
-});
-process.once('SIGTERM', () => {
-  try { bot.stop('SIGTERM'); } catch (e) {}
-});
-  
+        app.listen(PORT, () => {
+            console.log(`🚀 Server running on port ${PORT}`);
+        });
+    })
+    .catch((err) => {
+        console.error('❌ MongoDB Connection Error:', err.message);
+    });
