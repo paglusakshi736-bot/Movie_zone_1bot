@@ -20,10 +20,10 @@ async function processQueue(bot) {
     const fileId = document.file_id;
     const fileSize = (document.file_size / (1024 * 1024)).toFixed(1) + ' MB';
 
-    const parsed = parseSeriesInfo(rawFileName);
+    const parsed = typeof parseSeriesInfo === 'function' ? parseSeriesInfo(rawFileName) : { isSeries: false, seriesTitle: rawFileName };
 
     if (parsed.isSeries) {
-      const tmdbData = await searchTMDb(parsed.seriesTitle, 'series');
+      const tmdbData = typeof searchTMDb === 'function' ? await searchTMDb(parsed.seriesTitle, 'series') : null;
       const seriesTitle = tmdbData ? tmdbData.title : parsed.seriesTitle;
 
       let media = await Media.findOne({ cleanTitle: seriesTitle.toLowerCase(), type: 'series' });
@@ -33,22 +33,24 @@ async function processQueue(bot) {
           title: seriesTitle,
           cleanTitle: seriesTitle.toLowerCase(),
           type: 'series',
+          fileId: fileId,
+          file_id: fileId,
           tmdbId: tmdbData?.tmdbId || null,
-          year: tmdbData?.year || new Date().getFullYear(),
-          rating: tmdbData?.rating || 0,
+          year: tmdbData?.year || new Date().getFullYear().toString(),
+          rating: tmdbData?.rating || '8.0',
           genres: tmdbData?.genres || [],
           overview: tmdbData?.overview || 'Web series episodes.',
           poster: tmdbData?.poster || '',
           episodes: [{
-            seasonNumber: parsed.seasonNumber,
-            episodeNumber: parsed.episodeNumber,
+            seasonNumber: parsed.seasonNumber || 1,
+            episodeNumber: parsed.episodeNumber || 1,
             fileId: fileId,
             fileName: rawFileName,
             fileSize: fileSize
           }]
         });
         await media.save();
-        await broadcastNewMedia(bot, media, settings);
+        if (typeof broadcastNewMedia === 'function') await broadcastNewMedia(bot, media, settings);
       } else {
         const alreadyExists = media.episodes.some(
           ep => ep.seasonNumber === parsed.seasonNumber && ep.episodeNumber === parsed.episodeNumber
@@ -56,8 +58,8 @@ async function processQueue(bot) {
 
         if (!alreadyExists) {
           media.episodes.push({
-            seasonNumber: parsed.seasonNumber,
-            episodeNumber: parsed.episodeNumber,
+            seasonNumber: parsed.seasonNumber || 1,
+            episodeNumber: parsed.episodeNumber || 1,
             fileId: fileId,
             fileName: rawFileName,
             fileSize: fileSize
@@ -67,7 +69,7 @@ async function processQueue(bot) {
         }
       }
     } else {
-      const tmdbData = await searchTMDb(parsed.seriesTitle, 'movie');
+      const tmdbData = typeof searchTMDb === 'function' ? await searchTMDb(parsed.seriesTitle, 'movie') : null;
       const movieTitle = tmdbData ? tmdbData.title : parsed.seriesTitle;
 
       let media = await Media.findOne({ cleanTitle: movieTitle.toLowerCase(), type: 'movie' });
@@ -78,17 +80,18 @@ async function processQueue(bot) {
           cleanTitle: movieTitle.toLowerCase(),
           type: 'movie',
           tmdbId: tmdbData?.tmdbId || null,
-          year: tmdbData?.year || null,
-          rating: tmdbData?.rating || 0,
+          year: tmdbData?.year || new Date().getFullYear().toString(),
+          rating: tmdbData?.rating || '8.0',
           genres: tmdbData?.genres || [],
           overview: tmdbData?.overview || 'Full Movie File.',
           poster: tmdbData?.poster || '',
           fileId: fileId,
+          file_id: fileId,
           fileName: rawFileName,
           fileSize: fileSize
         });
         await media.save();
-        await broadcastNewMedia(bot, media, settings);
+        if (typeof broadcastNewMedia === 'function') await broadcastNewMedia(bot, media, settings);
       }
     }
   } catch (error) {
