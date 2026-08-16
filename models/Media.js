@@ -17,9 +17,15 @@ const MediaSchema = new mongoose.Schema({
   title: { type: String, required: true, index: true },
   cleanTitle: { type: String, default: '' },
   type: { type: String, enum: ['movie', 'series'], default: 'movie' },
+  
+  // डायरेक्ट फ़ाइल ID (यह मिसिंग था जिसकी वजह से एरर आ रहा था)
+  fileId: { type: String, default: '' },
+  file_id: { type: String, default: '' },
+  quality: { type: String, default: 'HD' },
+
   tmdbId: { type: Number, default: null },
-  year: { type: Number, default: null },
-  rating: { type: Number, default: 0 },
+  year: { type: String, default: '2026' },
+  rating: { type: String, default: '8.0' },
   genres: [{ type: String }],
   overview: { type: String, default: '' },
   poster: { type: String, default: '' },
@@ -30,7 +36,7 @@ const MediaSchema = new mongoose.Schema({
   viewsCount: { type: Number, default: 0 },
   downloadsCount: { type: Number, default: 0 },
 
-  // मूवी के लिए मल्टी-क्वालिटी फाइल्स (480p, 720p, 1080p)
+  // मल्टी-क्वालिटी फाइल्स
   files: [FileQualitySchema],
 
   // वेब सीरीज़ के एपिसोड्स लिस्ट
