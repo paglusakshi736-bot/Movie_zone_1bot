@@ -89,4 +89,9 @@ async function broadcastNewMedia(bot, mediaData, settings) {
   }
 }
 
-module.exports = { broadcastNewMedia, isEligibleForBroadcast };
+module.exports = { 
+  broadcastNewMedia, 
+  postToChannel: broadcastNewMedia, 
+  isEligibleForBroadcast 
+};
+
