@@ -2,6 +2,7 @@ const mongoose = require('mongoose');
 
 const SettingsSchema = new mongoose.Schema({
   mainChannel: { type: String, default: '' },
+  broadcastChannelId: { type: String, default: '' }, // index.js के साथ मैच करने के लिए
   discussionGroup: { type: String, default: '' },
   storageChannel: { type: String, default: '' },
   vipChannelLink: { type: String, default: '' },
@@ -22,9 +23,8 @@ const SettingsSchema = new mongoose.Schema({
   
   // शॉर्टनर और कमाई सेटिंग्स
   shortenerEnabled: { type: Boolean, default: false },
-  shortenerDomain: { type: String, default: '' }, // उदा. linkvertise.com, shrinkme.io
+  shortenerDomain: { type: String, default: '' },
   shortenerApi: { type: String, default: '' }
 }, { timestamps: true });
 
 module.exports = mongoose.model('Settings', SettingsSchema);
-
