@@ -8,29 +8,33 @@ let allMedia = [];
 let watchlist = JSON.parse(localStorage.getItem('user_watchlist') || '[]');
 let currentCategory = 'all';
 let searchQuery = '';
+let currentSort = 'latest';
 
 const mediaGrid = document.getElementById('media-grid');
 const trendingSlider = document.getElementById('trending-slider');
 const searchInput = document.getElementById('search-input');
 const clearSearchBtn = document.getElementById('clear-search');
 const catTabs = document.querySelectorAll('.cat-tab');
-const watchlistToggle = document.getElementById('watchlist-toggle');
+const sortFilter = document.getElementById('sort-filter');
+const totalCountSpan = document.getElementById('total-count');
 const modal = document.getElementById('media-modal');
 const modalBody = document.getElementById('modal-body');
 const modalClose = document.getElementById('modal-close');
 
 async function loadMedia() {
-  const container = document.getElementById('media-grid') || document.getElementById('moviesContainer');
   try {
     const res = await fetch('/api/media');
     if (!res.ok) throw new Error('Network response was not ok');
     
     allMedia = await res.json();
     
-    // अगर डेटाबेस में कोई मूवी नहीं है
+    if (totalCountSpan) {
+      totalCountSpan.innerText = allMedia.length;
+    }
+
     if (!allMedia || allMedia.length === 0) {
-      if (container) {
-        container.innerHTML = '<p style="grid-column: span 2; text-align:center; color:#aaa; padding: 20px;">अभी कोई मूवी उपलब्ध नहीं है। बॉट में फ़ाइल अपलोड करें!</p>';
+      if (mediaGrid) {
+        mediaGrid.innerHTML = '<p style="grid-column: span 2; text-align:center; color:#aaa; padding: 20px;">अभी कोई मूवी उपलब्ध नहीं है। बॉट में फ़ाइल अपलोड करें!</p>';
       }
       return;
     }
@@ -39,8 +43,8 @@ async function loadMedia() {
     renderGrid();
   } catch (err) {
     console.error('Error fetching media:', err);
-    if (container) {
-      container.innerHTML = '<p style="grid-column: span 2; text-align:center; color:#ff4d4d; padding: 20px;">डेटा लोड करने में त्रुटि! कृपया पुनः प्रयास करें।</p>';
+    if (mediaGrid) {
+      mediaGrid.innerHTML = '<p style="grid-column: span 2; text-align:center; color:#ff4d4d; padding: 20px;">डेटा लोड करने में त्रुटि! कृपया पुनः प्रयास करें।</p>';
     }
   }
 }
@@ -73,13 +77,23 @@ function renderGrid() {
 
     if (currentCategory === 'movie') matchesCat = item.type === 'movie';
     else if (currentCategory === 'series') matchesCat = item.type === 'series';
+    else if (currentCategory === 'hindi') matchesCat = (item.title.toLowerCase().includes('hindi') || (item.genres && item.genres.includes('Hindi')));
     else if (currentCategory === 'watchlist') matchesCat = watchlist.includes(item._id);
 
     return matchesSearch && matchesCat;
   });
 
-  if (currentCategory === 'top_rated') {
-    filtered.sort((a, b) => (b.rating || 0) - (a.rating || 0));
+  // Sorting
+  if (currentSort === 'rating') {
+    filtered.sort((a, b) => parseFloat(b.rating || 0) - parseFloat(a.rating || 0));
+  } else if (currentSort === '2026') {
+    filtered = filtered.filter(i => String(i.year) === '2026');
+  } else if (currentSort === '2025') {
+    filtered = filtered.filter(i => String(i.year) === '2025');
+  } else if (currentSort === '2024') {
+    filtered = filtered.filter(i => String(i.year) === '2024');
+  } else if (currentSort === 'older') {
+    filtered = filtered.filter(i => parseInt(i.year || 0) < 2024);
   }
 
   if (filtered.length === 0) {
@@ -96,7 +110,7 @@ function renderGrid() {
         </button>
         <div class="poster-wrap" onclick="openDetails('${item._id}')">
           <img src="${item.poster || 'https://via.placeholder.com/200x300?text=No+Poster'}" alt="${item.title}" loading="lazy">
-          <span class="card-rating">⭐ ${item.rating ? item.rating.toFixed(1) : 'N/A'}</span>
+          <span class="card-rating">⭐ ${item.rating ? item.rating : 'N/A'}</span>
         </div>
         <div class="card-info">
           <h4 class="card-title" onclick="openDetails('${item._id}')">${item.title}</h4>
@@ -123,7 +137,7 @@ function openDetails(id) {
   const item = allMedia.find(m => m._id === id);
   if (!item || !modal || !modalBody) return;
 
-  const botUsername = 'Movie_zone_1bot'; // अपने बॉट का यूज़रनेम चेक कर लें
+  const botUsername = 'Movie_zone_1bot';
   const botDeepLink = `https://t.me/${botUsername}?start=media_${item._id}`;
   const streamUrl = `/api/stream/${item._id}`;
   const fastDlUrl = `/api/fast-download/${item._id}`;
@@ -134,6 +148,15 @@ function openDetails(id) {
       <h3 style="margin-top: 10px; color: #fff;">${item.title || 'Movie'}</h3>
       <p style="color: #aaa; font-size: 13px;">⭐ ${item.rating || 'N/A'} | 📅 ${item.year || '2026'}</p>
     </div>
+
+    <!-- इन-ऐप वीडियो प्लेयर कंटेनर -->
+    <div id="video-container" style="display:none; margin-bottom: 15px;">
+      <video id="html5-player" controls width="100%" style="border-radius: 8px; background:#000;">
+        <source id="video-source" src="" type="video/mp4">
+        आपका ब्राउज़र वीडियो सपोर्ट नहीं करता।
+      </video>
+    </div>
+
     <div style="display: flex; flex-direction: column; gap: 10px;">
       <button onclick="playOnlineVideo('${streamUrl}')" class="dl-btn" style="background: #28a745; border: none; padding: 10px; border-radius: 6px; color: #fff; font-weight: bold; cursor: pointer;">
         <i class="fa-solid fa-play"></i> Watch Online (In-App Player)
@@ -157,13 +180,11 @@ function downloadViaBot(link) {
   }
 }
 
-// ऑनलाइन वीडियो चलाने का फ़ंक्शन (Adgram Ads इंटीग्रेशन के साथ)
 function playOnlineVideo(streamUrl) {
   const videoContainer = document.getElementById('video-container');
   const player = document.getElementById('html5-player');
   const source = document.getElementById('video-source');
 
-  // Adgram Ad कॉल (अगर उपलब्ध हो)
   if (window.Adgram && typeof window.Adgram.showAd === 'function') {
     window.Adgram.showAd({
       onAdClosed: () => {
@@ -176,6 +197,7 @@ function playOnlineVideo(streamUrl) {
 }
 
 function startStreaming(container, player, source, streamUrl) {
+  if (!container || !player || !source) return;
   container.style.display = 'block';
   source.src = streamUrl;
   player.load();
@@ -203,6 +225,13 @@ if (clearSearchBtn) {
     searchInput.value = '';
     searchQuery = '';
     clearSearchBtn.style.display = 'none';
+    renderGrid();
+  };
+}
+
+if (sortFilter) {
+  sortFilter.onchange = (e) => {
+    currentSort = e.target.value;
     renderGrid();
   };
 }
