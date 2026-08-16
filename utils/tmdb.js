@@ -101,5 +101,6 @@ async function fetchTmdbMetadata(rawTitle, mediaType = 'movie') {
   }
 }
 
-module.exports = { cleanFileName, fetchTmdbMetadata };
+module.exports = { cleanFileName, fetchTmdbMetadata, fetchTMDbDetails: fetchTmdbMetadata };
+
 
