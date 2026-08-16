@@ -1,30 +1,22 @@
 const Settings = require('../models/Settings');
 
 /**
- * टाइमर के साथ फ़ाइल भेजना और ऑटो-डिलीट करना
+ * मैसेज को दिए गए मिनटों बाद ऑटो-डिलीट करना
  */
-async function sendFileWithAutoDelete(bot, chatId, fileId, caption = '') {
-  try {
-    const settings = await Settings.findOne() || {};
-    const deleteMins = settings.autoDeleteMinutes || 15;
-
-    const sentMessage = await bot.sendDocument(chatId, fileId, {
-      caption: caption ? `${caption}\n\n⚠️ <i>This file will self-destruct in ${deleteMins} mins!</i>` : undefined,
-      parse_mode: 'HTML'
-    });
-
-    if (deleteMins > 0) {
-      setTimeout(async () => {
-        try {
-          await bot.deleteMessage(chatId, sentMessage.message_id);
-        } catch (e) {
-          // अगर पहले से डिलीट हो चुका हो तो इग्नोर करें
-        }
-      }, deleteMins * 60 * 1000);
+function scheduleAutoDelete(bot, chatId, messageId, minutes) {
+  if (!minutes || minutes <= 0) return;
+  
+  setTimeout(async () => {
+    try {
+      await bot.telegram.deleteMessage(chatId, messageId);
+      console.log(`[AutoDelete] Message ${messageId} deleted in chat ${chatId}`);
+    } catch (e) {
+      // अगर यूज़र ने पहले ही डिलीट कर दिया हो तो इग्नोर करें
     }
-  } catch (err) {
-    console.error('[AutoDelete Error]:', err.message);
-  }
+  }, minutes * 60 * 1000);
 }
 
-module.exports = { sendFileWithAutoDelete };
+module.exports = { 
+  scheduleAutoDelete, 
+  sendFileWithAutoDelete: scheduleAutoDelete 
+};
