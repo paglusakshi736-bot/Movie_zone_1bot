@@ -1,33 +1,23 @@
-/**
- * फ़ाइल नाम से सीज़न और एपिसोड पहचानना
- */
-function parseSeriesInfo(filename) {
-  const cleanName = filename.replace(/[_\.\-]/g, ' ');
-  
-  const sPattern = /S(?:eason\s*)?(\d{1,2})\s*(?:E|EP|Episode\s*)(\d{1,3})/i;
-  const epOnlyPattern = /(?:E|EP|Episode\s*)(\d{1,3})/i;
+function parseSeriesDetails(fileName) {
+  if (!fileName) return { isSeries: false, cleanTitle: '' };
 
-  const matchS = cleanName.match(sPattern);
-  if (matchS) {
+  const seriesRegex = /(.*?)(?:s|season)\s*(\d{1,2})|(?:\be\d{1,2}\b)/i;
+  const match = fileName.match(seriesRegex);
+
+  if (match) {
+    const cleanTitle = match[1] ? match[1].replace(/[._-]/g, ' ').trim() : fileName;
     return {
       isSeries: true,
-      seasonNumber: parseInt(matchS[1]),
-      episodeNumber: parseInt(matchS[2]),
-      seriesTitle: cleanName.split(matchS[0])[0].trim()
+      cleanTitle: cleanTitle
     };
   }
 
-  const matchEp = cleanName.match(epOnlyPattern);
-  if (matchEp) {
-    return {
-      isSeries: true,
-      seasonNumber: 1,
-      episodeNumber: parseInt(matchEp[1]),
-      seriesTitle: cleanName.split(matchEp[0])[0].trim()
-    };
-  }
-
-  return { isSeries: false, seriesTitle: cleanName };
+  return {
+    isSeries: false,
+    cleanTitle: fileName.replace(/[._-]/g, ' ').trim()
+  };
 }
 
-module.exports = { parseSeriesInfo };
+module.exports = {
+  parseSeriesDetails
+};
