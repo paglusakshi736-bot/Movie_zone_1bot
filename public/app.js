@@ -20,15 +20,27 @@ const modalBody = document.getElementById('modal-body');
 const modalClose = document.getElementById('modal-close');
 
 async function loadMedia() {
+  const container = document.getElementById('media-grid') || document.getElementById('moviesContainer');
   try {
     const res = await fetch('/api/media');
+    if (!res.ok) throw new Error('Network response was not ok');
+    
     allMedia = await res.json();
+    
+    // अगर डेटाबेस में कोई मूवी नहीं है
+    if (!allMedia || allMedia.length === 0) {
+      if (container) {
+        container.innerHTML = '<p style="grid-column: span 2; text-align:center; color:#aaa; padding: 20px;">अभी कोई मूवी उपलब्ध नहीं है। बॉट में फ़ाइल अपलोड करें!</p>';
+      }
+      return;
+    }
+
     renderTrending(allMedia);
     renderGrid();
   } catch (err) {
     console.error('Error fetching media:', err);
-    if (mediaGrid) {
-      mediaGrid.innerHTML = `<p style="grid-column: span 2; text-align:center; color:#ff334b; padding: 20px 0;">डेटा लोड करने में समस्या आई।</p>`;
+    if (container) {
+      container.innerHTML = '<p style="grid-column: span 2; text-align:center; color:#ff4d4d; padding: 20px;">डेटा लोड करने में त्रुटि! कृपया पुनः प्रयास करें।</p>';
     }
   }
 }
