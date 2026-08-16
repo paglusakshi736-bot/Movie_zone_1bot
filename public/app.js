@@ -9,7 +9,6 @@ let watchlist = JSON.parse(localStorage.getItem('user_watchlist') || '[]');
 let currentCategory = 'all';
 let searchQuery = '';
 
-// DOM Elements
 const mediaGrid = document.getElementById('media-grid');
 const trendingSlider = document.getElementById('trending-slider');
 const searchInput = document.getElementById('search-input');
@@ -20,7 +19,6 @@ const modal = document.getElementById('media-modal');
 const modalBody = document.getElementById('modal-body');
 const modalClose = document.getElementById('modal-close');
 
-// 1. डेटा लोड करना
 async function loadMedia() {
   try {
     const res = await fetch('/api/media');
@@ -35,7 +33,6 @@ async function loadMedia() {
   }
 }
 
-// 2. Trending / Top 10 रेंडर करना
 function renderTrending(items) {
   if (!trendingSlider) return;
   const top10 = [...items]
@@ -55,7 +52,6 @@ function renderTrending(items) {
   `).join('');
 }
 
-// 3. मुख्य ग्रिड रेंडर करना
 function renderGrid() {
   if (!mediaGrid) return;
 
@@ -86,20 +82,20 @@ function renderGrid() {
         <button class="fav-btn ${isFav ? 'active' : ''}" onclick="toggleWatchlist(event, '${item._id}')">
           <i class="fa-solid fa-heart"></i>
         </button>
-        <img src="${item.poster || 'https://via.placeholder.com/200x300?text=No+Poster'}" onclick="openDetails('${item._id}')" loading="lazy">
-        <div class="media-info" onclick="openDetails('${item._id}')">
-          <h4>${item.title}</h4>
-          <div class="media-meta">
-            <span>⭐ ${item.rating ? item.rating.toFixed(1) : 'N/A'}</span>
-            <span>📅 ${item.year || 'N/A'}</span>
-          </div>
+        <div class="poster-wrap" onclick="openDetails('${item._id}')">
+          <img src="${item.poster || 'https://via.placeholder.com/200x300?text=No+Poster'}" alt="${item.title}" loading="lazy">
+          <span class="card-rating">⭐ ${item.rating ? item.rating.toFixed(1) : 'N/A'}</span>
+        </div>
+        <div class="card-info">
+          <h4 class="card-title" onclick="openDetails('${item._id}')">${item.title}</h4>
+          <div class="card-meta">📅 ${item.year || 'N/A'} | ${item.type === 'series' ? 'Web Series' : 'Movie'}</div>
+          <button class="get-btn" onclick="openDetails('${item._id}')">View & Play</button>
         </div>
       </div>
     `;
   }).join('');
 }
 
-// 4. वॉचलिस्ट टॉगल (❤️)
 function toggleWatchlist(e, id) {
   e.stopPropagation();
   if (watchlist.includes(id)) {
@@ -111,47 +107,80 @@ function toggleWatchlist(e, id) {
   renderGrid();
 }
 
-// 5. मूवी/सीरीज़ डिटेल्स पॉपअप (Modal)
 function openDetails(id) {
   const item = allMedia.find(m => m._id === id);
   if (!item || !modal || !modalBody) return;
 
   const botUser = window.BOT_USERNAME || '';
-  const directBotLink = `https://t.me/${botUser}?start=media_${item._id}`;
+  const botDownloadLink = `https://t.me/${botUser}?start=media_${item._id}`;
+  const streamUrl = `/api/stream/${item._id}`;
+  const fastDlUrl = `/api/fast-download/${item._id}`;
 
   let contentHtml = `
     <h3 style="margin-bottom:8px; font-size:16px;">${item.title}</h3>
     <p style="font-size:12px; color:#aaa; margin-bottom:8px;">⭐ ${item.rating ? item.rating.toFixed(1) : 'N/A'} | 📅 ${item.year || 'N/A'} | 🎭 ${(item.genres || []).join(', ')}</p>
     <p style="font-size:13px; line-height:1.4; color:#ddd; margin-bottom:14px;">${item.overview || 'विवरण उपलब्ध नहीं है।'}</p>
-  `;
 
-  if (item.type === 'series' && item.episodes && item.episodes.length > 0) {
-    contentHtml += `<h4 style="font-size:13px; margin: 10px 0 6px 0; color:#ff334b;">एपिसोड्स:</h4><div style="display:flex; flex-direction:column; gap:6px; max-height:180px; overflow-y:auto;">`;
-    item.episodes.forEach(ep => {
-      contentHtml += `
-        <a href="https://t.me/${botUser}?start=ep_${item._id}_${ep.episodeNumber}" class="dl-btn" style="margin:0; padding:8px; font-size:12px; background:#222533; border:1px solid #33384c;">
-          ▶️ Season ${ep.seasonNumber || 1} - Episode ${ep.episodeNumber} (${ep.fileSize || 'HD'})
-        </a>
-      `;
-    });
-    contentHtml += `</div>`;
-  } else {
-    contentHtml += `
-      <a href="${directBotLink}" class="dl-btn">
-        <i class="fa-solid fa-download"></i> Get Movie Files / Download
+    <!-- इन-ऐप वीडियो प्लेयर कंटेनर -->
+    <div id="video-container" style="display:none; margin-bottom:15px;">
+      <video id="html5-player" controls width="100%" style="border-radius:8px; background:#000;">
+        <source id="video-source" src="" type="video/mp4">
+        आपका ब्राउज़र वीडियो सपोर्ट नहीं करता।
+      </video>
+    </div>
+
+    <div style="display:flex; flex-direction:column; gap:8px;">
+      <button onclick="playOnlineVideo('${streamUrl}')" class="dl-btn" style="background:#28a745;">
+        <i class="fa-solid fa-play"></i> ▶️ Watch Online (In-App Player)
+      </button>
+
+      <a href="${fastDlUrl}" target="_blank" class="dl-btn" style="background:#007bff;">
+        <i class="fa-brands fa-chrome"></i> ⚡ Fast Download (Chrome)
       </a>
-    `;
-  }
+
+      <a href="${botDownloadLink}" class="dl-btn">
+        <i class="fa-brands fa-telegram"></i> 📥 Get Telegram File
+      </a>
+    </div>
+  `;
 
   modalBody.innerHTML = contentHtml;
   modal.style.display = 'flex';
 }
 
-if (modalClose) {
-  modalClose.onclick = () => { modal.style.display = 'none'; };
+// ऑनलाइन वीडियो चलाने का फ़ंक्शन (Adgram Ads इंटीग्रेशन के साथ)
+function playOnlineVideo(streamUrl) {
+  const videoContainer = document.getElementById('video-container');
+  const player = document.getElementById('html5-player');
+  const source = document.getElementById('video-source');
+
+  // Adgram Ad कॉल (अगर उपलब्ध हो)
+  if (window.Adgram && typeof window.Adgram.showAd === 'function') {
+    window.Adgram.showAd({
+      onAdClosed: () => {
+        startStreaming(videoContainer, player, source, streamUrl);
+      }
+    });
+  } else {
+    startStreaming(videoContainer, player, source, streamUrl);
+  }
 }
 
-// 6. सर्च इवेंट्स
+function startStreaming(container, player, source, streamUrl) {
+  container.style.display = 'block';
+  source.src = streamUrl;
+  player.load();
+  player.play();
+}
+
+if (modalClose) {
+  modalClose.onclick = () => {
+    const player = document.getElementById('html5-player');
+    if (player) player.pause();
+    modal.style.display = 'none';
+  };
+}
+
 if (searchInput) {
   searchInput.oninput = (e) => {
     searchQuery = e.target.value;
@@ -169,7 +198,6 @@ if (clearSearchBtn) {
   };
 }
 
-// 7. टैब फ़िल्टर इवेंट्स
 catTabs.forEach(tab => {
   tab.onclick = () => {
     catTabs.forEach(t => t.classList.remove('active'));
@@ -178,16 +206,5 @@ catTabs.forEach(tab => {
     renderGrid();
   };
 });
-
-if (watchlistToggle) {
-  watchlistToggle.onclick = () => {
-    catTabs.forEach(t => t.classList.remove('active'));
-    currentCategory = currentCategory === 'watchlist' ? 'all' : 'watchlist';
-    if (currentCategory === 'all') {
-      document.querySelector('.cat-tab[data-category="all"]')?.classList.add('active');
-    }
-    renderGrid();
-  };
-}
 
 loadMedia();
