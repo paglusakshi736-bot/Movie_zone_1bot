@@ -257,15 +257,21 @@ bot.on(['video', 'document'], async (ctx) => {
 // --- 4. सर्वर शुरू करना (Render 0.0.0.0 Binding Fix) ---
 const PORT = process.env.PORT || 10000;
 
-app.listen(PORT, '0.0.0.0', () => {
+app.listen(PORT, '0.0.0.0', async () => {
   console.log(`🚀 Web Server is running on port ${PORT}`);
   
-  bot.launch()
-    .then(() => console.log('🤖 Telegram Bot Engine is Live!'))
-    .catch(err => {
-      console.error('Bot launch error (Ignored if 409 Conflict):', err.message);
-    });
+  try {
+    await bot.launch();
+    console.log('🤖 Telegram Bot Engine is Live!');
+  } catch (err) {
+    console.error('Bot launch error:', err.message);
+  }
 });
 
-process.once('SIGINT', () => bot.stop('SIGINT'));
-process.once('SIGTERM', () => bot.stop('SIGTERM'));
+// सुरक्षित शटडाउन (बिना क्रैश हुए)
+process.once('SIGINT', () => {
+  try { bot.stop('SIGINT'); } catch (e) {}
+});
+process.once('SIGTERM', () => {
+  try { bot.stop('SIGTERM'); } catch (e) {}
+});
