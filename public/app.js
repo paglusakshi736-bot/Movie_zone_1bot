@@ -20,10 +20,11 @@ const totalCountSpan = document.getElementById('total-count');
 const modal = document.getElementById('media-modal');
 const modalBody = document.getElementById('modal-body');
 const modalClose = document.getElementById('modal-close');
+const BASE_URL = window.location.origin;
 
 async function loadMedia() {
   try {
-    const res = await fetch('/api/media');
+    const res = await fetch(`${BASE_URL}/api/media`);
     if (!res.ok) throw new Error('Network response was not ok');
     
     allMedia = await res.json();
@@ -34,7 +35,7 @@ async function loadMedia() {
 
     if (!allMedia || allMedia.length === 0) {
       if (mediaGrid) {
-        mediaGrid.innerHTML = '<p style="grid-column: span 2; text-align:center; color:#aaa; padding: 20px;">अभी कोई मूवी उपलब्ध नहीं है। बॉट में फ़ाइल अपलोड करें!</p>';
+        mediaGrid.innerHTML = '<p style="grid-column: span 2; text-align:center; color:#aaa; padding: 40px 20px;">अभी कोई मूवी उपलब्ध नहीं है। बॉट में फ़ाइल अपलोड करें!</p>';
       }
       return;
     }
@@ -44,10 +45,11 @@ async function loadMedia() {
   } catch (err) {
     console.error('Error fetching media:', err);
     if (mediaGrid) {
-      mediaGrid.innerHTML = '<p style="grid-column: span 2; text-align:center; color:#ff4d4d; padding: 20px;">डेटा लोड करने में त्रुटि! कृपया पुनः प्रयास करें।</p>';
+      mediaGrid.innerHTML = '<p style="grid-column: span 2; text-align:center; color:#ff4d4d; padding: 40px 20px;">डेटा लोड करने में त्रुटि! कृपया ऐप दोबारा खोलें।</p>';
     }
   }
 }
+
 
 function renderTrending(items) {
   if (!trendingSlider) return;
@@ -139,9 +141,9 @@ function openDetails(id) {
 
   const botUsername = 'Movie_zone_1bot';
   const botDeepLink = `https://t.me/${botUsername}?start=media_${item._id}`;
-  const streamUrl = `/api/stream/${item._id}`;
-  const fastDlUrl = `/api/fast-download/${item._id}`;
-
+    const streamUrl = `${BASE_URL}/api/stream/${item._id}`;
+  const fastDlUrl = `${BASE_URL}/api/fast-download/${item._id}`;
+  
   modalBody.innerHTML = `
     <div style="text-align: center; margin-bottom: 15px;">
       <img src="${item.poster || 'https://via.placeholder.com/200x300?text=No+Poster'}" style="width: 140px; border-radius: 8px; box-shadow: 0 4px 10px rgba(0,0,0,0.5);">
