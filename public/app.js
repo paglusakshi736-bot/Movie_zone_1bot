@@ -123,41 +123,38 @@ function openDetails(id) {
   const item = allMedia.find(m => m._id === id);
   if (!item || !modal || !modalBody) return;
 
-  const botUser = window.BOT_USERNAME || '';
-  const botDownloadLink = `https://t.me/${botUser}?start=media_${item._id}`;
+  const botUsername = 'Movie_zone_1bot'; // अपने बॉट का यूज़रनेम चेक कर लें
+  const botDeepLink = `https://t.me/${botUsername}?start=media_${item._id}`;
   const streamUrl = `/api/stream/${item._id}`;
   const fastDlUrl = `/api/fast-download/${item._id}`;
 
-  let contentHtml = `
-    <h3 style="margin-bottom:8px; font-size:16px;">${item.title}</h3>
-    <p style="font-size:12px; color:#aaa; margin-bottom:8px;">⭐ ${item.rating ? item.rating.toFixed(1) : 'N/A'} | 📅 ${item.year || 'N/A'} | 🎭 ${(item.genres || []).join(', ')}</p>
-    <p style="font-size:13px; line-height:1.4; color:#ddd; margin-bottom:14px;">${item.overview || 'विवरण उपलब्ध नहीं है।'}</p>
-
-    <!-- इन-ऐप वीडियो प्लेयर कंटेनर -->
-    <div id="video-container" style="display:none; margin-bottom:15px;">
-      <video id="html5-player" controls width="100%" style="border-radius:8px; background:#000;">
-        <source id="video-source" src="" type="video/mp4">
-        आपका ब्राउज़र वीडियो सपोर्ट नहीं करता।
-      </video>
+  modalBody.innerHTML = `
+    <div style="text-align: center; margin-bottom: 15px;">
+      <img src="${item.poster || 'https://via.placeholder.com/200x300?text=No+Poster'}" style="width: 140px; border-radius: 8px; box-shadow: 0 4px 10px rgba(0,0,0,0.5);">
+      <h3 style="margin-top: 10px; color: #fff;">${item.title || 'Movie'}</h3>
+      <p style="color: #aaa; font-size: 13px;">⭐ ${item.rating || 'N/A'} | 📅 ${item.year || '2026'}</p>
     </div>
-
-    <div style="display:flex; flex-direction:column; gap:8px;">
-      <button onclick="playOnlineVideo('${streamUrl}')" class="dl-btn" style="background:#28a745;">
-        <i class="fa-solid fa-play"></i> ▶️ Watch Online (In-App Player)
+    <div style="display: flex; flex-direction: column; gap: 10px;">
+      <button onclick="playOnlineVideo('${streamUrl}')" class="dl-btn" style="background: #28a745; border: none; padding: 10px; border-radius: 6px; color: #fff; font-weight: bold; cursor: pointer;">
+        <i class="fa-solid fa-play"></i> Watch Online (In-App Player)
       </button>
-
-      <a href="${fastDlUrl}" target="_blank" class="dl-btn" style="background:#007bff;">
-        <i class="fa-brands fa-chrome"></i> ⚡ Fast Download (Chrome)
+      <a href="${fastDlUrl}" target="_blank" class="dl-btn" style="background: #007bff; text-decoration: none; text-align: center; padding: 10px; border-radius: 6px; color: #fff; font-weight: bold;">
+        <i class="fa-brands fa-chrome"></i> Fast Download (Chrome)
       </a>
-
-      <a href="${botDownloadLink}" class="dl-btn">
-        <i class="fa-brands fa-telegram"></i> 📥 Get Telegram File
-      </a>
+      <button onclick="downloadViaBot('${botDeepLink}')" class="dl-btn" style="background: #229ED9; border: none; padding: 10px; border-radius: 6px; color: #fff; font-weight: bold; cursor: pointer;">
+        <i class="fa-brands fa-telegram"></i> Get Telegram File
+      </button>
     </div>
   `;
-
-  modalBody.innerHTML = contentHtml;
   modal.style.display = 'flex';
+}
+
+function downloadViaBot(link) {
+  if (window.Telegram?.WebApp?.openTelegramLink) {
+    window.Telegram.WebApp.openTelegramLink(link);
+  } else {
+    window.open(link, '_blank');
+  }
 }
 
 // ऑनलाइन वीडियो चलाने का फ़ंक्शन (Adgram Ads इंटीग्रेशन के साथ)
