@@ -109,14 +109,19 @@ bot.start(async (ctx) => {
   const userId = String(ctx.from.id);
   const payload = ctx.startPayload;
 
-  await User.findOneAndUpdate(
-    { telegramId: userId },
-    { 
-      username: ctx.from.username || '', 
-      firstName: ctx.from.first_name || '' 
-    },
-    { upsert: true, new: true }
-  );
+    await User.findOneAndUpdate(
+      { userId: Number(userId) },
+      { 
+        $set: {
+          userId: Number(userId),
+          telegramId: userId,
+          username: ctx.from.username || '',
+          firstName: ctx.from.first_name || ''
+        }
+      },
+      { upsert: true, new: true, setDefaultsOnInsert: true }
+    );
+  
 
   // रेफ़रल हैंडलिंग
   if (payload && payload.startsWith('ref_')) {
