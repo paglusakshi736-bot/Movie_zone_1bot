@@ -76,4 +76,11 @@ async function isUserVerified(userId) {
   }
 }
 
-module.exports = { generateShortLink, isUserVerified };
+module.exports = { 
+  generateShortLink, 
+  isUserVerified,
+  createShortLink: async (url) => {
+    return url;
+  }
+};
+
