@@ -38,7 +38,7 @@ function checkIsAdmin(userId) {
 }
 
 // --- 1. MONGODB कनेक्शन ---
-mongoose.connect(process.env.MONGO_URI)
+mongoose.connect(process.env.MONGO_URI || process.env.MONGODB_URI)
   .then(() => console.log('✅ MongoDB Database Connected Successfully!'))
   .catch(err => console.error('❌ MongoDB Connection Error:', err.message));
 
@@ -64,13 +64,14 @@ app.get('/api/media', async (req, res) => {
 app.get('/api/stream/:id', async (req, res) => {
   try {
     const media = await Media.findById(req.params.id);
-    if (!media || !media.fileId) {
+    const fileId = media?.fileId || media?.file_id;
+    if (!media || !fileId) {
       return res.status(404).send('मीडिया नहीं मिला');
     }
 
     await Media.findByIdAndUpdate(req.params.id, { $inc: { viewsCount: 1 } });
 
-    const directUrl = await getTelegramDirectUrl(process.env.BOT_TOKEN, media.fileId);
+    const directUrl = await getTelegramDirectUrl(process.env.BOT_TOKEN, fileId);
     if (directUrl) {
       res.redirect(directUrl);
     } else {
@@ -85,13 +86,14 @@ app.get('/api/stream/:id', async (req, res) => {
 app.get('/api/fast-download/:id', async (req, res) => {
   try {
     const media = await Media.findById(req.params.id);
-    if (!media || !media.fileId) {
+    const fileId = media?.fileId || media?.file_id;
+    if (!media || !fileId) {
       return res.status(404).send('फ़ाइल नहीं मिली');
     }
 
     await Media.findByIdAndUpdate(req.params.id, { $inc: { downloadsCount: 1 } });
 
-    const directUrl = await getTelegramDirectUrl(process.env.BOT_TOKEN, media.fileId);
+    const directUrl = await getTelegramDirectUrl(process.env.BOT_TOKEN, fileId);
     if (directUrl) {
       res.redirect(directUrl);
     } else {
@@ -109,6 +111,7 @@ bot.start(async (ctx) => {
   const userId = String(ctx.from.id);
   const payload = ctx.startPayload;
 
+  try {
     await User.findOneAndUpdate(
       { userId: Number(userId) },
       { 
@@ -121,12 +124,16 @@ bot.start(async (ctx) => {
       },
       { upsert: true, new: true, setDefaultsOnInsert: true }
     );
-  
+  } catch (uErr) {
+    console.error('User save error:', uErr.message);
+  }
 
   // रेफ़रल हैंडलिंग
   if (payload && payload.startsWith('ref_')) {
     const referrerId = payload.replace('ref_', '');
-    await processReferral(userId, referrerId);
+    if (typeof processReferral === 'function') {
+      await processReferral(userId, referrerId);
+    }
   }
 
   // डायरेक्ट मीडिया फ़ाइल रिक्वेस्ट
@@ -135,7 +142,7 @@ bot.start(async (ctx) => {
     return sendMediaToUser(ctx, mediaId);
   }
 
-  const webAppUrl = process.env.WEBAPP_URL || 'https://movie-zone-1bot.onrender.com';
+  const webAppUrl = process.env.WEBAPP_URL || process.env.RENDER_EXTERNAL_URL || 'https://movie-zone-1bot.onrender.com';
   const refLink = `https://t.me/${ctx.botInfo.username}?start=ref_${userId}`;
 
   const welcomeText = `
@@ -167,7 +174,9 @@ bot.command('admin', async (ctx) => {
   if (!checkIsAdmin(ctx.from?.id)) {
     return ctx.reply('⛔ आपके पास एडमिन पैनल का एक्सेस नहीं है।');
   }
-  showAdminPanel(ctx);
+  if (typeof showAdminPanel === 'function') {
+    showAdminPanel(ctx);
+  }
 });
 
 // एडमिन कॉलबैक क्वेरी हैंडलर
@@ -177,7 +186,9 @@ bot.on('callback_query', async (ctx) => {
     if (!checkIsAdmin(ctx.from?.id)) {
       return ctx.answerCbQuery('⛔ एक्सेस अस्वीकृत!', { show_alert: true });
     }
-    return handleAdminCallbacks(ctx);
+    if (typeof handleAdminCallbacks === 'function') {
+      return handleAdminCallbacks(ctx);
+    }
   }
 });
 
@@ -190,10 +201,10 @@ async function sendMediaToUser(ctx, mediaId) {
     const fileId = media.fileId || media.file_id;
     if (!fileId) return ctx.reply('❌ डेटाबेस में फ़ाइल आईडी नहीं मिली।');
 
-    const isVip = await checkVipStatus(ctx.from.id);
+    const isVip = typeof checkVipStatus === 'function' ? await checkVipStatus(ctx.from.id) : false;
     const settings = await Settings.findOne() || {};
 
-    if (settings.shortenerEnabled && !isVip) {
+    if (settings.shortenerEnabled && !isVip && typeof createShortLink === 'function') {
       const originalBotLink = `https://t.me/${ctx.botInfo.username}?start=media_${media._id}`;
       const shortUrl = await createShortLink(originalBotLink);
 
@@ -209,22 +220,27 @@ async function sendMediaToUser(ctx, mediaId) {
     const captionText = `🎬 <b>${media.title}</b> ${media.year ? `(${media.year})` : ''}\n⭐ <b>Rating:</b> ${media.rating || 'N/A'}`;
     let sentMsg;
 
-    // पहले वीडियो फॉर्मेट में भेजने का प्रयास, अगर फेल हुआ तो डॉक्यूमेंट फॉर्मेट
+    // 1. पहले वीडियो के रूप में भेजने का प्रयास
     try {
       sentMsg = await ctx.replyWithVideo(fileId, {
         caption: captionText,
         parse_mode: 'HTML'
       });
     } catch (vErr) {
-      sentMsg = await ctx.replyWithDocument(fileId, {
-        caption: captionText,
-        parse_mode: 'HTML'
-      });
+      // 2. अगर वीडियो फेल हुआ तो डॉक्यूमेंट के रूप में प्रयास
+      try {
+        sentMsg = await ctx.replyWithDocument(fileId, {
+          caption: captionText,
+          parse_mode: 'HTML'
+        });
+      } catch (dErr) {
+        console.error('Document send also failed:', dErr.message);
+      }
     }
 
     await Media.findByIdAndUpdate(mediaId, { $inc: { downloadsCount: 1 } });
 
-    if (settings.autoDeleteMinutes && settings.autoDeleteMinutes > 0 && sentMsg) {
+    if (settings.autoDeleteMinutes && settings.autoDeleteMinutes > 0 && sentMsg && typeof scheduleAutoDelete === 'function') {
       scheduleAutoDelete(bot, ctx.chat.id, sentMsg.message_id, settings.autoDeleteMinutes);
     }
   } catch (err) {
@@ -233,47 +249,89 @@ async function sendMediaToUser(ctx, mediaId) {
   }
 }
 
-
-// ऑटो अपलोड और TMDb हैंडलर (Multiple Admins + Storage Channel Supported)
+// ऑटो अपलोड और TMDb/फ़ॉलबैक हैंडलर
 bot.on(['video', 'document'], async (ctx) => {
-  const isSenderAdmin = checkIsAdmin(ctx.from?.id);
-  const isStorageChannel = String(ctx.channelPost?.chat?.id) === String(process.env.STORAGE_CHANNEL_ID);
+  try {
+    const isSenderAdmin = checkIsAdmin(ctx.from?.id);
+    const isStorageChannel = String(ctx.channelPost?.chat?.id) === String(process.env.STORAGE_CHANNEL_ID || '');
 
-  if (!isSenderAdmin && !isStorageChannel) {
-    return;
+    if (!isSenderAdmin && !isStorageChannel) {
+      return;
+    }
+
+    const doc = ctx.message?.document || ctx.message?.video || ctx.channelPost?.document || ctx.channelPost?.video;
+    if (!doc) return;
+
+    const rawName = doc.file_name || ctx.message?.caption || ctx.channelPost?.caption || 'New Video';
+    const fileId = doc.file_id;
+
+    if (ctx.chat?.type === 'private') {
+      ctx.reply(`⏳ फ़ाइल प्रोसेस हो रही है: <b>${rawName}</b>`, { parse_mode: 'HTML' });
+    }
+
+    // 1. नाम साफ़ करना
+    const cleanTitle = rawName
+      .replace(/\.[^/.]+$/, "")
+      .replace(/[\._]/g, ' ')
+      .replace(/\b(480p|720p|1080p|2160p|4k|hevc|hdrip|webrip|bluray|x264|x265|hindi|dual audio)\b/gi, '')
+      .trim();
+
+    // 2. वीडियो का टेलीग्राम थंबनेल चेक करना
+    let posterUrl = '';
+    const thumbObj = doc.thumb || doc.thumbnail;
+    if (thumbObj?.file_id) {
+      try {
+        const thumbLink = await ctx.telegram.getFileLink(thumbObj.file_id);
+        posterUrl = thumbLink.href;
+      } catch (tErr) {
+        console.error('Thumb error:', tErr.message);
+      }
+    }
+
+    // 3. TMDb डेटा
+    let tmdbData = {};
+    try {
+      if (typeof fetchTMDbDetails === 'function') {
+        const seriesInfo = typeof parseSeriesDetails === 'function' ? parseSeriesDetails(rawName) : { isSeries: false, cleanTitle: cleanTitle };
+        tmdbData = await fetchTMDbDetails(seriesInfo.isSeries ? seriesInfo.cleanTitle : cleanTitle);
+      }
+    } catch (e) {
+      console.log('TMDB not found, using fallback.');
+    }
+
+    // 4. फ़ाइनल डेटा (TMDB -> Telegram Thumb -> Auto Poster)
+    const finalTitle = tmdbData?.title || cleanTitle || rawName;
+    const finalPoster = tmdbData?.poster || posterUrl || `https://via.placeholder.com/300x450/1e293b/ffffff?text=${encodeURIComponent(finalTitle.substring(0, 20))}`;
+    const quality = typeof extractQuality === 'function' ? extractQuality(rawName) : 'HD';
+
+    const newMedia = new Media({
+      title: finalTitle,
+      cleanTitle: finalTitle.toLowerCase().trim(),
+      type: tmdbData?.type || (rawName.toLowerCase().includes('s0') || rawName.toLowerCase().includes('season') ? 'series' : 'movie'),
+      fileId: fileId,
+      file_id: fileId,
+      quality: quality,
+      poster: finalPoster,
+      rating: tmdbData?.rating || '8.0',
+      year: tmdbData?.year || new Date().getFullYear().toString(),
+      overview: tmdbData?.overview || `${finalTitle} फ़ाइल अब Movie Zone पर उपलब्ध है।`,
+      genres: tmdbData?.genres || ['Entertainment']
+    });
+
+    await newMedia.save();
+
+    // ब्रॉडकास्ट
+    const settings = await Settings.findOne() || {};
+    if (settings.broadcastChannelId && typeof postToChannel === 'function') {
+      await postToChannel(bot, settings.broadcastChannelId, newMedia, ctx.botInfo?.username);
+    }
+
+    if (ctx.chat?.type === 'private') {
+      ctx.reply(`✅ <b>${finalTitle}</b> डेटाबेस में सेव हो गई!`, { parse_mode: 'HTML' });
+    }
+  } catch (uploadErr) {
+    console.error('Upload Error:', uploadErr.message);
   }
-
-  const doc = ctx.message?.document || ctx.message?.video || ctx.channelPost?.document || ctx.channelPost?.video;
-  const fileName = doc.file_name || ctx.message?.caption || ctx.channelPost?.caption || 'Unknown Movie';
-  const fileId = doc.file_id;
-
-  ctx.reply(`⏳ फ़ाइल प्रोसेस हो रही है: <b>${fileName}</b>`, { parse_mode: 'HTML' });
-
-  const quality = extractQuality(fileName);
-  const seriesInfo = parseSeriesDetails(fileName);
-  const tmdbData = await fetchTMDbDetails(seriesInfo.isSeries ? seriesInfo.cleanTitle : fileName);
-
-  const newMedia = new Media({
-    title: tmdbData.title || fileName,
-    cleanTitle: (tmdbData.title || fileName).toLowerCase().trim(),
-    type: seriesInfo.isSeries ? 'series' : 'movie',
-    fileId: fileId,
-    quality: quality,
-    poster: tmdbData.poster,
-    rating: tmdbData.rating,
-    year: tmdbData.year,
-    overview: tmdbData.overview,
-    genres: tmdbData.genres
-  });
-
-  await newMedia.save();
-
-  const settings = await Settings.findOne() || {};
-  if (settings.broadcastChannelId) {
-    await postToChannel(bot, settings.broadcastChannelId, newMedia, ctx.botInfo.username);
-  }
-
-  ctx.reply(`✅ <b>${newMedia.title}</b> डेटाबेस में सेव हो गई और ब्रॉडकास्ट कर दी गई!`, { parse_mode: 'HTML' });
 });
 
 // --- 4. सर्वर शुरू करना (Render 0.0.0.0 Binding Fix) ---
@@ -297,3 +355,4 @@ process.once('SIGINT', () => {
 process.once('SIGTERM', () => {
   try { bot.stop('SIGTERM'); } catch (e) {}
 });
+  
