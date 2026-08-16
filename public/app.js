@@ -20,12 +20,14 @@ const totalCountSpan = document.getElementById('total-count');
 const modal = document.getElementById('media-modal');
 const modalBody = document.getElementById('modal-body');
 const modalClose = document.getElementById('modal-close');
-const BASE_URL = window.location.origin;
+
+// आपका लाइव Render डोमेन
+const BASE_URL = 'https://movie-zone-1bot.onrender.com';
 
 async function loadMedia() {
   try {
     const res = await fetch(`${BASE_URL}/api/media`);
-    if (!res.ok) throw new Error('Network response was not ok');
+    if (!res.ok) throw new Error('Network error');
     
     allMedia = await res.json();
     
@@ -35,7 +37,7 @@ async function loadMedia() {
 
     if (!allMedia || allMedia.length === 0) {
       if (mediaGrid) {
-        mediaGrid.innerHTML = '<p style="grid-column: span 2; text-align:center; color:#aaa; padding: 40px 20px;">अभी कोई मूवी उपलब्ध नहीं है। बॉट में फ़ाइल अपलोड करें!</p>';
+        mediaGrid.innerHTML = '<p style="grid-column: span 2; text-align:center; color:#aaa; padding: 40px 20px;">डेटाबेस में कोई मूवी नहीं मिली। बॉट में नई फाइल भेजें!</p>';
       }
       return;
     }
@@ -50,7 +52,6 @@ async function loadMedia() {
   }
 }
 
-
 function renderTrending(items) {
   if (!trendingSlider) return;
   const top10 = [...items]
@@ -58,14 +59,15 @@ function renderTrending(items) {
     .slice(0, 10);
 
   if (top10.length === 0) {
-    trendingSlider.parentElement.style.display = 'none';
+    if (trendingSlider.parentElement) trendingSlider.parentElement.style.display = 'none';
     return;
   }
 
+  if (trendingSlider.parentElement) trendingSlider.parentElement.style.display = 'block';
   trendingSlider.innerHTML = top10.map((item, index) => `
     <div class="trending-card" onclick="openDetails('${item._id}')">
       <span class="rank-badge">#${index + 1}</span>
-      <img src="${item.poster || 'https://via.placeholder.com/150x220?text=No+Poster'}" alt="${item.title}" loading="lazy">
+      <img src="${item.poster || 'https://placehold.co/400x600/161b22/e50914?text=Poster'}" alt="${item.title}" loading="lazy">
     </div>
   `).join('');
 }
@@ -74,12 +76,15 @@ function renderGrid() {
   if (!mediaGrid) return;
 
   let filtered = allMedia.filter(item => {
-    const matchesSearch = item.title.toLowerCase().includes(searchQuery.toLowerCase());
+    const title = (item.title || '').toLowerCase();
+    const matchesSearch = title.includes(searchQuery.toLowerCase());
     let matchesCat = true;
 
     if (currentCategory === 'movie') matchesCat = item.type === 'movie';
     else if (currentCategory === 'series') matchesCat = item.type === 'series';
-    else if (currentCategory === 'hindi') matchesCat = (item.title.toLowerCase().includes('hindi') || (item.genres && item.genres.includes('Hindi')));
+    else if (currentCategory === 'hindi' || currentCategory === 'hindi-dubbed') {
+      matchesCat = title.includes('hindi') || (item.genres && item.genres.includes('Hindi'));
+    }
     else if (currentCategory === 'watchlist') matchesCat = watchlist.includes(item._id);
 
     return matchesSearch && matchesCat;
@@ -99,7 +104,7 @@ function renderGrid() {
   }
 
   if (filtered.length === 0) {
-    mediaGrid.innerHTML = `<p style="grid-column: span 2; text-align:center; color:#777; padding: 20px 0;">कोई मूवी नहीं मिली।</p>`;
+    mediaGrid.innerHTML = `<p style="grid-column: span 2; text-align:center; color:#777; padding: 30px 0;">कोई मूवी नहीं मिली।</p>`;
     return;
   }
 
@@ -111,12 +116,12 @@ function renderGrid() {
           <i class="fa-solid fa-heart"></i>
         </button>
         <div class="poster-wrap" onclick="openDetails('${item._id}')">
-          <img src="${item.poster || 'https://via.placeholder.com/200x300?text=No+Poster'}" alt="${item.title}" loading="lazy">
-          <span class="card-rating">⭐ ${item.rating ? item.rating : 'N/A'}</span>
+          <img src="${item.poster || 'https://placehold.co/400x600/161b22/e50914?text=Poster'}" alt="${item.title}" loading="lazy">
+          <span class="card-rating">⭐ ${item.rating ? item.rating : '8.0'}</span>
         </div>
         <div class="card-info">
           <h4 class="card-title" onclick="openDetails('${item._id}')">${item.title}</h4>
-          <div class="card-meta">📅 ${item.year || 'N/A'} | ${item.type === 'series' ? 'Web Series' : 'Movie'}</div>
+          <div class="card-meta">📅 ${item.year || '2026'} | ${item.type === 'series' ? 'Web Series' : 'Movie'}</div>
           <button class="get-btn" onclick="openDetails('${item._id}')">View & Play</button>
         </div>
       </div>
@@ -141,17 +146,16 @@ function openDetails(id) {
 
   const botUsername = 'Movie_zone_1bot';
   const botDeepLink = `https://t.me/${botUsername}?start=media_${item._id}`;
-    const streamUrl = `${BASE_URL}/api/stream/${item._id}`;
+  const streamUrl = `${BASE_URL}/api/stream/${item._id}`;
   const fastDlUrl = `${BASE_URL}/api/fast-download/${item._id}`;
-  
+
   modalBody.innerHTML = `
     <div style="text-align: center; margin-bottom: 15px;">
-      <img src="${item.poster || 'https://via.placeholder.com/200x300?text=No+Poster'}" style="width: 140px; border-radius: 8px; box-shadow: 0 4px 10px rgba(0,0,0,0.5);">
+      <img src="${item.poster || 'https://placehold.co/400x600/161b22/e50914?text=Poster'}" style="width: 140px; border-radius: 8px; box-shadow: 0 4px 10px rgba(0,0,0,0.5);">
       <h3 style="margin-top: 10px; color: #fff;">${item.title || 'Movie'}</h3>
-      <p style="color: #aaa; font-size: 13px;">⭐ ${item.rating || 'N/A'} | 📅 ${item.year || '2026'}</p>
+      <p style="color: #aaa; font-size: 13px;">⭐ ${item.rating || '8.0'} | 📅 ${item.year || '2026'}</p>
     </div>
 
-    <!-- इन-ऐप वीडियो प्लेयर कंटेनर -->
     <div id="video-container" style="display:none; margin-bottom: 15px;">
       <video id="html5-player" controls width="100%" style="border-radius: 8px; background:#000;">
         <source id="video-source" src="" type="video/mp4">
@@ -187,6 +191,8 @@ function playOnlineVideo(streamUrl) {
   const player = document.getElementById('html5-player');
   const source = document.getElementById('video-source');
 
+  if (!videoContainer || !player || !source) return;
+
   if (window.Adgram && typeof window.Adgram.showAd === 'function') {
     window.Adgram.showAd({
       onAdClosed: () => {
@@ -199,7 +205,6 @@ function playOnlineVideo(streamUrl) {
 }
 
 function startStreaming(container, player, source, streamUrl) {
-  if (!container || !player || !source) return;
   container.style.display = 'block';
   source.src = streamUrl;
   player.load();
@@ -247,4 +252,5 @@ catTabs.forEach(tab => {
   };
 });
 
+// ऐप शुरू होना
 loadMedia();
