@@ -187,6 +187,9 @@ async function sendMediaToUser(ctx, mediaId) {
     const media = await Media.findById(mediaId);
     if (!media) return ctx.reply('❌ यह फ़ाइल उपलब्ध नहीं है या हटा दी गई है।');
 
+    const fileId = media.fileId || media.file_id;
+    if (!fileId) return ctx.reply('❌ डेटाबेस में फ़ाइल आईडी नहीं मिली।');
+
     const isVip = await checkVipStatus(ctx.from.id);
     const settings = await Settings.findOne() || {};
 
@@ -194,28 +197,42 @@ async function sendMediaToUser(ctx, mediaId) {
       const originalBotLink = `https://t.me/${ctx.botInfo.username}?start=media_${media._id}`;
       const shortUrl = await createShortLink(originalBotLink);
 
-      return ctx.reply(`
-🔒 <b>फ़ाइल अनलॉक करने के लिए नीचे दिए गए लिंक पर क्लिक करें:</b>\n\n👉 <a href="${shortUrl}">Click Here to Unlock File</a>\n\n<i>💎 Ads हटाने के लिए VIP मेंबरशिप लें।</i>`, {
-        parse_mode: 'HTML',
-        disable_web_page_preview: true
+      return ctx.reply(
+        `🔒 <b>फ़ाइल अनलॉक करने के लिए नीचे दिए गए लिंक पर क्लिक करें:</b>\n\n👉 <a href="${shortUrl}">Click Here to Unlock</a>`,
+        {
+          parse_mode: 'HTML',
+          disable_web_page_preview: true
+        }
+      );
+    }
+
+    const captionText = `🎬 <b>${media.title}</b> ${media.year ? `(${media.year})` : ''}\n⭐ <b>Rating:</b> ${media.rating || 'N/A'}`;
+    let sentMsg;
+
+    // पहले वीडियो फॉर्मेट में भेजने का प्रयास, अगर फेल हुआ तो डॉक्यूमेंट फॉर्मेट
+    try {
+      sentMsg = await ctx.replyWithVideo(fileId, {
+        caption: captionText,
+        parse_mode: 'HTML'
+      });
+    } catch (vErr) {
+      sentMsg = await ctx.replyWithDocument(fileId, {
+        caption: captionText,
+        parse_mode: 'HTML'
       });
     }
 
-    const sentMsg = await ctx.replyWithDocument(media.fileId, {
-      caption: `🎬 <b>${media.title}</b> (${media.year || ''})\n⭐ <b>Rating:</b> ${media.rating || 'N/A'}\n\n<i>⚠️ यह फ़ाइल ${settings.autoDeleteMinutes || 15} मिनट में अपने-आप डिलीट हो जाएगी।</i>`,
-      parse_mode: 'HTML'
-    });
-
     await Media.findByIdAndUpdate(mediaId, { $inc: { downloadsCount: 1 } });
 
-    if (settings.autoDeleteMinutes !== 0) {
-      scheduleAutoDelete(bot, ctx.chat.id, sentMsg.message_id, settings.autoDeleteMinutes || 15);
+    if (settings.autoDeleteMinutes && settings.autoDeleteMinutes > 0 && sentMsg) {
+      scheduleAutoDelete(bot, ctx.chat.id, sentMsg.message_id, settings.autoDeleteMinutes);
     }
   } catch (err) {
     console.error('Error sending media:', err.message);
-    ctx.reply('❌ फ़ाइल भेजने में समस्या आई।');
+    ctx.reply('❌ फ़ाइल भेजने में समस्या आई!');
   }
 }
+
 
 // ऑटो अपलोड और TMDb हैंडलर (Multiple Admins + Storage Channel Supported)
 bot.on(['video', 'document'], async (ctx) => {
