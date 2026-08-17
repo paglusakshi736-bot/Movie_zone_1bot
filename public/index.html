@@ -1,0 +1,77 @@
+<!DOCTYPE html>
+<html lang="hi">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>Movie Zone</title>
+    <script src="https://telegram.org/js/telegram-web-app.js"></script>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <link rel="stylesheet" href="style.css?v=2.0">
+</head>
+<body>
+
+    <header class="app-header">
+        <div class="brand-container">
+            <img src="https://i.ibb.co/23Vn7YBR/1786682242346.png" alt="Logo" class="brand-logo">
+            <div class="brand-text">
+                <h1>Movie Zone</h1>
+            </div>
+        </div>
+    </header>
+
+    <!-- 🔥 ट्रेंडिंग स्लाइडर -->
+    <div id="trendingSection" style="display:none;">
+        <div class="section-title"><i class="fas fa-fire" style="color:#ff0844;"></i> Trending Movies</div>
+        <div class="trending-slider" id="trendingSlider"></div>
+    </div>
+
+    <!-- 🔍 सर्च और साल ड्रॉपडाउन -->
+    <div class="search-wrapper">
+        <div class="search-box">
+            <i class="fas fa-search"></i>
+            <input type="text" id="searchInput" class="search-input" placeholder="Search movies, series...">
+        </div>
+        <div class="year-select-box">
+            <select id="yearDropdown" class="year-dropdown" onchange="handleYearChange(this.value)">
+                <option value="all">📅 All Years</option>
+            </select>
+        </div>
+    </div>
+
+    <!-- 🏷️ कैटेगरी चिप्स -->
+    <div class="filter-scroll">
+        <div class="filter-chip active" onclick="applyCategoryFilter('all', this)">All</div>
+        <div class="filter-chip" onclick="applyCategoryFilter('watchlist', this)">❤️ My Saved</div>
+        <div class="filter-chip" onclick="applyCategoryFilter('Hindi', this)">Hindi Dubbed</div>
+        <div class="filter-chip" onclick="applyCategoryFilter('Web Series', this)">Web Series</div>
+        <div class="filter-chip" onclick="applyCategoryFilter('South', this)">South Special</div>
+    </div>
+
+    <!-- 🎴 मुख्य मूवी लिस्ट -->
+    <main class="movies-grid" id="moviesContainer">
+        <div class="loader"><i class="fas fa-spinner fa-spin"></i> Loading Movies...</div>
+    </main>
+
+    <!-- 📱 बॉटम शीट पॉपअप -->
+    <div class="sheet-overlay" id="sheetOverlay" onclick="closeSheet()"></div>
+    <div class="bottom-sheet" id="bottomSheet">
+        <div class="sheet-handle"></div>
+        <div class="sheet-title" id="sheetTitle">Movie Title</div>
+        
+        <!-- इन-ऐप वीडियो प्लेयर -->
+        <video id="sheetVideoPlayer" class="video-box" controls width="100%"></video>
+        
+        <div class="files-list" id="filesList"></div>
+    </div>
+
+    <!-- 🔒 जॉइन लॉक पॉपअप -->
+    <div class="join-modal" id="joinModal">
+        <h3>🔒 Access Locked</h3>
+        <p>File download karne ke liye channel aur group join karna zaroori hai!</p>
+        <div id="joinLinksContainer"></div>
+        <button class="join-check-btn" onclick="retryDownload()">✅ Joined, Try Again</button>
+    </div>
+
+    <script src="app.js?v=2.0"></script>
+</body>
+</html>
