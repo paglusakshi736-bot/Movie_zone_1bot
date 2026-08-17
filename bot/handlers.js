@@ -58,20 +58,19 @@ async function renderDeletePanel(bot, chatId, messageId = null, page = 1, search
         { text: `❌ Cancel`, callback_data: `cancel_del` }
     ]);
 
-    let text = `⚙️ *मल्टी-सेलेक्ट डिलीट पैनल*\n`;
-    if (searchQuery) text += `🔍 *सर्च फ़िल्टर:* \`${searchQuery}\`\n`;
-    text += `📊 *कुल मूवीज़:* ${totalMovies} (Page ${page}/${totalPages})\n\nमूवीज़ पर क्लिक करके टिक (✅) लगाएं, फिर नीचे *Delete Selected* दबाएं:`;
+    let text = `⚙️ <b>मल्टी-सेलेक्ट डिलीट पैनल</b>\n`;
+    if (searchQuery) text += `🔍 <b>सर्च फ़िल्टर:</b> <code>${searchQuery}</code>\n`;
+    text += `📊 <b>कुल मूवीज़:</b> ${totalMovies} (Page ${page}/${totalPages})\n\nमूवीज़ पर क्लिक करके टिक (✅) लगाएं, फिर नीचे <b>Delete Selected</b> दबाएं:`;
 
     if (messageId) {
-        await bot.editMessageText(text, { chat_id: chatId, message_id: messageId, parse_mode: 'Markdown', reply_markup: { inline_keyboard } });
+        await bot.editMessageText(text, { chat_id: chatId, message_id: messageId, parse_mode: 'HTML', reply_markup: { inline_keyboard } });
     } else {
-        const sent = await bot.sendMessage(chatId, text, { parse_mode: 'Markdown', reply_markup: { inline_keyboard } });
+        const sent = await bot.sendMessage(chatId, text, { parse_mode: 'HTML', reply_markup: { inline_keyboard } });
         adminDeleteSessions[chatId].messageId = sent.message_id;
     }
 }
 
 module.exports = function setupBotHandlers(bot) {
-    // /start कमांड (शॉर्टनर अनलॉक और मिनी ऐप दोनों सपोर्टेड)
     bot.onText(/\/start(?:\s+(.+))?/, async (msg, match) => {
         try {
             await User.findOneAndUpdate(
@@ -111,7 +110,7 @@ module.exports = function setupBotHandlers(bot) {
             const allMovies = await Movie.find();
             const totalFiles = allMovies.reduce((sum, m) => sum + (m.files ? m.files.length : 0), 0);
 
-            bot.sendMessage(msg.chat.id, `📊 *लाइव स्टेटिस्टिक्स*\n\n👥 *कुल यूज़र्स:* ${totalUsers}\n🎬 *कुल मूवी कार्ड्स:* ${totalMovies}\n📂 *कुल फाइल्स:* ${totalFiles}`, { parse_mode: 'Markdown' });
+            bot.sendMessage(msg.chat.id, `📊 <b>लाइव स्टेटिस्टिक्स</b>\n\n👥 <b>कुल यूज़र्स:</b> ${totalUsers}\n🎬 <b>कुल मूवी कार्ड्स:</b> ${totalMovies}\n📂 <b>कुल फाइल्स:</b> ${totalFiles}`, { parse_mode: 'HTML' });
         } catch (e) { bot.sendMessage(msg.chat.id, "❌ एरर: " + e.message); }
     });
 
@@ -175,7 +174,7 @@ module.exports = function setupBotHandlers(bot) {
                 const result = await Movie.deleteMany({ _id: { $in: session.selected } });
                 session.selected = [];
                 await bot.answerCallbackQuery(query.id, { text: `✅ ${result.deletedCount} मूवीज़ डिलीट!` });
-                await bot.editMessageText(`🗑️ *सफलता:* कुल **${result.deletedCount}** मूवीज़ हटा दी गईं।`, { chat_id: chatId, message_id: messageId, parse_mode: 'Markdown' });
+                await bot.editMessageText(`🗑️ <b>सफलता:</b> कुल <b>${result.deletedCount}</b> मूवीज़ हटा दी गईं।`, { chat_id: chatId, message_id: messageId, parse_mode: 'HTML' });
             } catch (err) {
                 bot.answerCallbackQuery(query.id, { text: "एरर: " + err.message });
             }
@@ -189,7 +188,7 @@ module.exports = function setupBotHandlers(bot) {
     bot.onText(/\/rename (.+)/, async (msg, match) => {
         if (!isAdmin(msg.from.id)) return;
         const parts = match[1].split('=');
-        if (parts.length !== 2) return bot.sendMessage(msg.chat.id, "⚠️ तरीका: `/rename Purana = Naya`", { parse_mode: 'Markdown' });
+        if (parts.length !== 2) return bot.sendMessage(msg.chat.id, "⚠️ तरीका: <code>/rename Purana = Naya</code>", { parse_mode: 'HTML' });
 
         try {
             const movie = await Movie.findOneAndUpdate(
@@ -197,7 +196,7 @@ module.exports = function setupBotHandlers(bot) {
                 { title: parts[1].trim() },
                 { new: true }
             );
-            if (movie) bot.sendMessage(msg.chat.id, `✅ नाम बदलकर *"${movie.title}"* कर दिया गया!`, { parse_mode: 'Markdown' });
+            if (movie) bot.sendMessage(msg.chat.id, `✅ नाम बदलकर <b>"${movie.title}"</b> कर दिया गया!`, { parse_mode: 'HTML' });
             else bot.sendMessage(msg.chat.id, `❌ मूवी नहीं मिली।`);
         } catch (e) { bot.sendMessage(msg.chat.id, "❌ एरर: " + e.message); }
     });
@@ -213,7 +212,7 @@ module.exports = function setupBotHandlers(bot) {
                     { thumbFileId: photoId },
                     { new: true }
                 );
-                if (movie) bot.sendMessage(msg.chat.id, `✅ *"${movie.title}"* का पोस्टर बदल दिया गया!`, { parse_mode: 'Markdown' });
+                if (movie) bot.sendMessage(msg.chat.id, `✅ <b>"${movie.title}"</b> का पोस्टर बदल दिया गया!`, { parse_mode: 'HTML' });
                 else bot.sendMessage(msg.chat.id, `❌ मूवी नहीं मिली।`);
             } catch (e) { bot.sendMessage(msg.chat.id, "❌ एरर: " + e.message); }
         }
@@ -224,7 +223,7 @@ module.exports = function setupBotHandlers(bot) {
         const status = match[1].toLowerCase() === 'on';
         try {
             await Config.findOneAndUpdate({ key: 'forcesub_enabled' }, { value: status }, { upsert: true });
-            bot.sendMessage(msg.chat.id, `🔒 Force Sub: *${status ? 'चालू (ON)' : 'बंद (OFF)'}*`, { parse_mode: 'Markdown' });
+            bot.sendMessage(msg.chat.id, `🔒 Force Sub: <b>${status ? 'चालू (ON)' : 'बंद (OFF)'}</b>`, { parse_mode: 'HTML' });
         } catch (e) { bot.sendMessage(msg.chat.id, "❌ एरर: " + e.message); }
     });
 
@@ -232,7 +231,7 @@ module.exports = function setupBotHandlers(bot) {
         if (!isAdmin(msg.from.id)) return;
         try {
             await Config.findOneAndUpdate({ key: 'forcesub_channel' }, { value: match[1].trim() }, { upsert: true });
-            bot.sendMessage(msg.chat.id, `📢 चैनल सेट: \`${match[1].trim()}\``, { parse_mode: 'Markdown' });
+            bot.sendMessage(msg.chat.id, `📢 चैनल सेट: <code>${match[1].trim()}</code>`, { parse_mode: 'HTML' });
         } catch (e) { bot.sendMessage(msg.chat.id, "❌ एरर: " + e.message); }
     });
 
@@ -240,7 +239,7 @@ module.exports = function setupBotHandlers(bot) {
         if (!isAdmin(msg.from.id)) return;
         try {
             await Config.findOneAndUpdate({ key: 'forcesub_group' }, { value: match[1].trim() }, { upsert: true });
-            bot.sendMessage(msg.chat.id, `💬 ग्रुप सेट: \`${match[1].trim()}\``, { parse_mode: 'Markdown' });
+            bot.sendMessage(msg.chat.id, `💬 ग्रुप सेट: <code>${match[1].trim()}</code>`, { parse_mode: 'HTML' });
         } catch (e) { bot.sendMessage(msg.chat.id, "❌ एरर: " + e.message); }
     });
 
@@ -249,7 +248,7 @@ module.exports = function setupBotHandlers(bot) {
         const status = match[1].toLowerCase() === 'on';
         try {
             await Config.findOneAndUpdate({ key: 'shortener_enabled' }, { value: status }, { upsert: true });
-            bot.sendMessage(msg.chat.id, `🔗 शॉर्टनर: *${status ? 'चालू (ON)' : 'बंद (OFF)'}*`, { parse_mode: 'Markdown' });
+            bot.sendMessage(msg.chat.id, `🔗 शॉर्टनर: <b>${status ? 'चालू (ON)' : 'बंद (OFF)'}</b>`, { parse_mode: 'HTML' });
         } catch (e) { bot.sendMessage(msg.chat.id, "❌ एरर: " + e.message); }
     });
 
@@ -258,12 +257,12 @@ module.exports = function setupBotHandlers(bot) {
         const input = match[1];
         const domainMatch = input.match(/domain=([^\s]+)/i);
         const apiMatch = input.match(/api=([^\s]+)/i);
-        if (!domainMatch || !apiMatch) return bot.sendMessage(msg.chat.id, "⚠️ तरीका: `/setshortener domain=gplinks.in api=YOUR_API_KEY`", { parse_mode: 'Markdown' });
+        if (!domainMatch || !apiMatch) return bot.sendMessage(msg.chat.id, "⚠️ तरीका: <code>/setshortener domain=gplinks.in api=YOUR_API_KEY</code>", { parse_mode: 'HTML' });
 
         try {
             await Config.findOneAndUpdate({ key: 'shortener_domain' }, { value: domainMatch[1] }, { upsert: true });
             await Config.findOneAndUpdate({ key: 'shortener_api' }, { value: apiMatch[1] }, { upsert: true });
-            bot.sendMessage(msg.chat.id, `✅ शॉर्टनर सेटिंग्स सेव हुईं!`, { parse_mode: 'Markdown' });
+            bot.sendMessage(msg.chat.id, `✅ शॉर्टनर सेटिंग्स सेव हुईं!`, { parse_mode: 'HTML' });
         } catch (e) { bot.sendMessage(msg.chat.id, "❌ एरर: " + e.message); }
     });
 
@@ -288,7 +287,19 @@ module.exports = function setupBotHandlers(bot) {
             let thumbFileId = file.thumbnail ? file.thumbnail.file_id : null;
 
             try {
-                let movie = await Movie.findOne({ title: new RegExp(`^${cleanTitle}$`, 'i') });
+                const tmdbData = await fetchTMDBData(cleanTitle);
+                const finalMovieTitle = tmdbData?.officialTitle || cleanTitle;
+                const poster = tmdbData?.poster || `https://placehold.co/400x600/161b22/e50914?text=${encodeURIComponent(finalMovieTitle)}`;
+                const rating = tmdbData?.rating || '8.0';
+                const year = tmdbData?.year || detectedYear;
+
+                let movie = await Movie.findOne({ 
+                    $or: [
+                        { title: new RegExp(`^${cleanTitle}$`, 'i') },
+                        { title: new RegExp(`^${finalMovieTitle}$`, 'i') }
+                    ]
+                });
+
                 let finalLabel = label;
                 if (fileSize) finalLabel += ` (${fileSize})`;
 
@@ -298,18 +309,18 @@ module.exports = function setupBotHandlers(bot) {
 
                     movie.files.push({ label: finalLabel, fileId, fileType, fileSize });
                     if (thumbFileId && !movie.thumbFileId) movie.thumbFileId = thumbFileId;
+                    if (poster && (!movie.poster || movie.poster.includes('placehold.co'))) movie.poster = poster;
                     movie.updatedAt = new Date();
                     await movie.save();
 
-                    await bot.sendMessage(msg.chat.id, `✅ *मौजूदा कार्ड में नया वर्ज़न जोड़ा गया!*\n\n🎬 *मूवी:* ${movie.title}\n📦 *क्वालिटी:* ${finalLabel}\n📂 *कुल फाइल्स:* ${movie.files.length}`, { parse_mode: 'Markdown' });
+                    await bot.sendMessage(
+                        msg.chat.id,
+                        `✅ <b>मौजूदा कार्ड में नया वर्ज़न जोड़ा गया!</b>\n\n🎬 <b>मूवी:</b> ${movie.title}\n📦 <b>क्वालिटी:</b> ${finalLabel}\n📂 <b>कुल फाइल्स:</b> ${movie.files.length}`,
+                        { parse_mode: 'HTML' }
+                    );
                 } else {
-                    const tmdbData = await fetchTMDBData(cleanTitle);
-                    const poster = tmdbData?.poster || `https://placehold.co/400x600/161b22/e50914?text=${encodeURIComponent(cleanTitle)}`;
-                    const rating = tmdbData?.rating || '8.0';
-                    const year = tmdbData?.year || detectedYear;
-
                     movie = new Movie({
-                        title: cleanTitle,
+                        title: finalMovieTitle,
                         poster,
                         rating,
                         year,
@@ -319,7 +330,11 @@ module.exports = function setupBotHandlers(bot) {
                     });
                     await movie.save();
 
-                    await bot.sendMessage(msg.chat.id, `✅ *नया मूवी कार्ड बना!* \n\n🎬 *मूवी:* ${cleanTitle}\n📦 *क्वालिटी:* ${finalLabel}\n⭐ *रेटिंग:* ${rating}`, { parse_mode: 'Markdown' });
+                    await bot.sendMessage(
+                        msg.chat.id,
+                        `✅ <b>नया मूवी कार्ड बना!</b>\n\n🎬 <b>मूवी:</b> ${finalMovieTitle}\n📦 <b>क्वालिटी:</b> ${finalLabel}\n⭐ <b>रेटिंग:</b> ${rating}\n📅 <b>साल:</b> ${year}`,
+                        { parse_mode: 'HTML' }
+                    );
                 }
             } catch (err) {
                 await bot.sendMessage(msg.chat.id, "❌ एरर: " + err.message);
