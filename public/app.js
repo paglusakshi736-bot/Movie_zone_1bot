@@ -29,7 +29,7 @@ async function fetchMovies() {
         renderTrending();
         renderFilteredMovies();
     } catch (err) {
-        document.getElementById('moviesContainer').innerHTML = '<div class="loader" style="color:#ff4e50"><i class="fas fa-exclamation-circle"></i> Error loading movies.</div>';
+        document.getElementById('moviesContainer').innerHTML = '<div class="loader" style="color:#ff0844"><i class="fas fa-exclamation-circle"></i> Error loading movies.</div>';
     }
 }
 
@@ -45,7 +45,7 @@ function renderTrending() {
     slider.innerHTML = topItems.map((m, idx) => `
         <div class="trending-card" onclick='openSheet(${JSON.stringify(m).replace(/'/g, "&apos;")})'>
             <span class="rank-badge">#${idx + 1}</span>
-            <img src="${m.poster || m.thumbFileId ? `${BACKEND_URL}/api/thumb/${m.thumbFileId}` : 'https://placehold.co/400x600/161b22/e50914?text=Poster'}" alt="${m.title}">
+            <img src="${m.poster || (m.thumbFileId ? `${BACKEND_URL}/api/thumb/${m.thumbFileId}` : 'https://placehold.co/400x600/161b22/e50914?text=Poster')}" alt="${m.title}">
         </div>
     `).join('');
 }
@@ -58,8 +58,14 @@ function renderFilteredMovies() {
         const matchesSearch = titleLower.includes(searchVal);
         
         let matchesCategory = true;
-        if (selectedCategory === 'watchlist') matchesCategory = watchlist.includes(m._id);
-        else if (selectedCategory !== 'all') matchesCategory = (m.category || '').toLowerCase() === selectedCategory.toLowerCase();
+        if (selectedCategory === 'watchlist') {
+            matchesCategory = watchlist.includes(m._id);
+        } else if (selectedCategory === 'latest') {
+            // लेटेस्ट रिलीज़: 2026 और 2025 की मूवीज
+            matchesCategory = (String(m.year) === '2026' || String(m.year) === '2025');
+        } else if (selectedCategory !== 'all') {
+            matchesCategory = (m.category || '').toLowerCase() === selectedCategory.toLowerCase();
+        }
 
         const matchesYear = (selectedYear === 'all') || String(m.year) === selectedYear;
         return matchesSearch && matchesCategory && matchesYear;
@@ -119,7 +125,6 @@ function openSheet(movie) {
     document.getElementById('sheetTitle').innerText = movie.title;
     const filesList = document.getElementById('filesList');
     
-    // वीडियो प्लेयर छुपाएं और रोकें
     const player = document.getElementById('sheetVideoPlayer');
     player.pause();
     player.style.display = 'none';
