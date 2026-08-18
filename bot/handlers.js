@@ -266,7 +266,7 @@ module.exports = function setupBotHandlers(bot) {
         } catch (e) { bot.sendMessage(msg.chat.id, "❌ एरर: " + e.message); }
     });
 
-    // ऑटो अपलोड लिसनर
+    // फ़ाइल अपलोड हैंडलर
     bot.on('message', (msg) => {
         if (msg.text && msg.text.startsWith('/')) return;
         if (msg.photo && msg.caption && msg.caption.startsWith('/setposter')) return;
@@ -279,7 +279,7 @@ module.exports = function setupBotHandlers(bot) {
 
         uploadQueue = uploadQueue.then(async () => {
             let rawInput = msg.caption || file.file_name || '';
-            const { cleanTitle, label, detectedCat, detectedYear } = parseMediaInfo(rawInput);
+            const { cleanTitle, label, isSeries, isDubbed, detectedYear } = parseMediaInfo(rawInput);
 
             const fileId = file.file_id;
             const fileType = msg.video ? 'video' : 'document';
@@ -292,6 +292,14 @@ module.exports = function setupBotHandlers(bot) {
                 const poster = tmdbData?.poster || `https://placehold.co/400x600/161b22/e50914?text=${encodeURIComponent(finalMovieTitle)}`;
                 const rating = tmdbData?.rating || '8.0';
                 const year = tmdbData?.year || detectedYear;
+
+                // कैटेगरी ऑटो-प्रायोरिटी लॉजिक
+                let finalCategory = tmdbData?.category || 'Movie';
+                if (isSeries) {
+                    finalCategory = 'Web Series';
+                } else if (isDubbed && finalCategory !== 'Hindi') {
+                    finalCategory = 'Hindi';
+                }
 
                 let movie = await Movie.findOne({ 
                     $or: [
@@ -324,7 +332,7 @@ module.exports = function setupBotHandlers(bot) {
                         poster,
                         rating,
                         year,
-                        category: detectedCat,
+                        category: finalCategory,
                         thumbFileId,
                         files: [{ label: finalLabel, fileId, fileType, fileSize }]
                     });
@@ -332,7 +340,7 @@ module.exports = function setupBotHandlers(bot) {
 
                     await bot.sendMessage(
                         msg.chat.id,
-                        `✅ <b>नया मूवी कार्ड बना!</b>\n\n🎬 <b>मूवी:</b> ${finalMovieTitle}\n📦 <b>क्वालिटी:</b> ${finalLabel}\n⭐ <b>रेटिंग:</b> ${rating}\n📅 <b>साल:</b> ${year}`,
+                        `✅ <b>नया कार्ड बना!</b>\n\n🎬 <b>मूवी:</b> ${finalMovieTitle}\n🏷️ <b>कैटेगरी:</b> ${finalCategory}\n📦 <b>क्वालिटी:</b> ${finalLabel}\n⭐ <b>रेटिंग:</b> ${rating}\n📅 <b>साल:</b> ${year}`,
                         { parse_mode: 'HTML' }
                     );
                 }
