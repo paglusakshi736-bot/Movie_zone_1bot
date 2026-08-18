@@ -6,7 +6,7 @@
     <title>Movie Zone</title>
     <script src="https://telegram.org/js/telegram-web-app.js"></script>
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
-    <link rel="stylesheet" href="style.css?v=2.1">
+    <link rel="stylesheet" href="style.css?v=2.5">
 </head>
 <body>
 
@@ -38,11 +38,12 @@
         </div>
     </div>
 
-    <!-- 🏷️ कैटेगरी चिप्स -->
+    <!-- 🏷️ फ़िल्टर चिप्स (Hollywood समेत) -->
     <div class="filter-scroll">
         <div class="filter-chip active" onclick="applyCategoryFilter('all', this)">All</div>
         <div class="filter-chip" onclick="applyCategoryFilter('latest', this)">🔥 Latest</div>
         <div class="filter-chip" onclick="applyCategoryFilter('watchlist', this)">❤️ My Saved</div>
+        <div class="filter-chip" onclick="applyCategoryFilter('Hollywood', this)">🎬 Hollywood</div>
         <div class="filter-chip" onclick="applyCategoryFilter('Hindi', this)">Hindi Dubbed</div>
         <div class="filter-chip" onclick="applyCategoryFilter('Web Series', this)">Web Series</div>
         <div class="filter-chip" onclick="applyCategoryFilter('South', this)">South Special</div>
@@ -73,6 +74,6 @@
         <button class="join-check-btn" onclick="retryDownload()">✅ Joined, Try Again</button>
     </div>
 
-    <script src="app.js?v=2.1"></script>
+    <script src="app.js?v=2.5"></script>
 </body>
 </html>
