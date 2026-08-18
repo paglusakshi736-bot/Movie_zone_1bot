@@ -61,7 +61,7 @@ function renderFilteredMovies() {
         if (selectedCategory === 'watchlist') {
             matchesCategory = watchlist.includes(m._id);
         } else if (selectedCategory === 'latest') {
-            // लेटेस्ट रिलीज़: 2026 और 2025 की मूवीज
+            // लेटेस्ट रिलीज़: 2026 और 2025 की फ़िल्में
             matchesCategory = (String(m.year) === '2026' || String(m.year) === '2025');
         } else if (selectedCategory !== 'all') {
             matchesCategory = (m.category || '').toLowerCase() === selectedCategory.toLowerCase();
