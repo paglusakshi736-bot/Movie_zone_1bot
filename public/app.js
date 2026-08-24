@@ -229,3 +229,29 @@ function applyCategoryFilter(cat, el) {
 }
 
 fetchMovies();
+async function sendMovieRequest(movieName) {
+    let name = movieName;
+    if (!name) {
+        name = prompt("मूवी का नाम लिखें:");
+    }
+    if (!name || name.trim() === '') return;
+
+    const tgUser = window.Telegram?.WebApp?.initDataUnsafe?.user || { first_name: 'Guest', username: 'none' };
+
+    try {
+        const res = await fetch('/api/request-movie', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ movieName: name.trim(), user: tgUser })
+        });
+        const data = await res.json();
+        if (data.success) {
+            alert(`✅ "${name}" की रिक्वेस्ट एडमिन को भेज दी गई है!`);
+        } else {
+            alert("❌ रिक्वेस्ट भेजने में समस्या आई।");
+        }
+    } catch (err) {
+        alert("❌ एरर: " + err.message);
+    }
+}
+
