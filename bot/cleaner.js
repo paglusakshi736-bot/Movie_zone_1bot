@@ -59,29 +59,39 @@ function formatBytes(bytes) {
     return (bytes / Math.pow(1024, i)).toFixed(1) + ' ' + sizes[i];
 }
 
-async function fetchTMDBData(title, year = null) {
+async function fetchTMDBData(title, year = null, isSeries = false) {
     const TMDB_KEY = process.env.TMDB_API_KEY;
     if (!TMDB_KEY) return null;
     try {
+        const endpoint = isSeries ? 'search/tv' : 'search/movie';
         const params = { api_key: TMDB_KEY, query: title };
         if (year && year !== '2026') {
-            params.year = year;
-            params.primary_release_year = year;
+            if (isSeries) {
+                params.first_air_date_year = year;
+            } else {
+                params.primary_release_year = year;
+            }
         }
 
-        const res = await axios.get(`https://api.themoviedb.org/3/search/multi`, { params, timeout: 6000 });
+        let res = await axios.get(`https://api.themoviedb.org/3/${endpoint}`, { params, timeout: 6000 });
+
+        // अगर साल के साथ नहीं मिला तो बिना साल के बैकअप सर्च
+        if ((!res.data || !res.data.results || res.data.results.length === 0) && year) {
+            delete params.primary_release_year;
+            delete params.first_air_date_year;
+            res = await axios.get(`https://api.themoviedb.org/3/${endpoint}`, { params, timeout: 6000 });
+        }
 
         if (res.data && res.data.results && res.data.results.length > 0) {
-            const validResults = res.data.results.filter(r => r.poster_path);
+            const results = res.data.results.filter(r => r.poster_path);
             
-            let matched = validResults.find(r => {
-                const name = (r.title || r.name || '').toLowerCase();
-                return name === title.toLowerCase();
-            });
+            // 1. एग्जैक्ट टाइटल मैच ढूंढें
+            let matched = results.find(r => (r.title || r.name || '').toLowerCase() === title.toLowerCase());
 
-            if (!matched && validResults.length > 0) {
-                validResults.sort((a, b) => (b.popularity || 0) - (a.popularity || 0));
-                matched = validResults[0];
+            // 2. नहीं तो सबसे पॉपुलर रिजल्ट
+            if (!matched && results.length > 0) {
+                results.sort((a, b) => (b.popularity || 0) - (a.popularity || 0));
+                matched = results[0];
             }
 
             if (!matched) matched = res.data.results[0];
@@ -90,15 +100,11 @@ async function fetchTMDBData(title, year = null) {
             const posterPath = matched.poster_path ? `https://image.tmdb.org/t/p/w500${matched.poster_path}` : null;
             const lang = (matched.original_language || '').toLowerCase();
 
-            let tmdbCategory = 'Movie';
-            if (matched.media_type === 'tv') {
-                tmdbCategory = 'Web Series';
-            } else if (lang === 'en') {
-                tmdbCategory = 'Hollywood';
-            } else if (lang === 'hi') {
-                tmdbCategory = 'Hindi';
-            } else if (['te', 'ta', 'ml', 'kn'].includes(lang)) {
-                tmdbCategory = 'South';
+            let tmdbCategory = isSeries ? 'Web Series' : 'Movie';
+            if (!isSeries) {
+                if (lang === 'en') tmdbCategory = 'Hollywood';
+                else if (lang === 'hi') tmdbCategory = 'Hindi';
+                else if (['te', 'ta', 'ml', 'kn'].includes(lang)) tmdbCategory = 'South';
             }
 
             return {
