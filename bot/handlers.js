@@ -287,7 +287,7 @@ module.exports = function setupBotHandlers(bot) {
             let thumbFileId = file.thumbnail ? file.thumbnail.file_id : null;
 
             try {
-                const tmdbData = await fetchTMDBData(cleanTitle,detectedYear);
+                const tmdbData = await fetchTMDBData(cleanTitle,detectedYear,isSeries);
                 const finalMovieTitle = tmdbData?.officialTitle || cleanTitle;
                 
                 // TMDB से पोस्टर न मिलने पर null रखेंगे ताकि फ़ाइल का Telegram Thumbnail काम करे
