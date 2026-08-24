@@ -35,6 +35,31 @@ module.exports = function createApiRoutes(bot) {
             res.redirect(fileLink);
         } catch (err) { res.status(404).send('Stream Link Not Found'); }
     });
+        // Mini App से मूवी रिक्वेस्ट प्राप्त करने के लिए
+    router.post('/request-movie', async (req, res) => {
+        try {
+            const { movieName, user } = req.body;
+            const adminId = process.env.ADMIN_ID ? process.env.ADMIN_ID.split(',')[0].trim() : null;
+
+            if (!movieName) {
+                return res.status(400).json({ success: false, message: 'Movie name is required' });
+            }
+
+            if (adminId) {
+                await bot.sendMessage(
+                    adminId,
+                    `📩 <b>Mini App से नई रिक्वेस्ट!</b>\n\n🎬 <b>मूवी:</b> ${movieName}\n👤 <b>यूज़र:</b> ${user?.first_name || 'User'} (@${user?.username || 'N/A'})\n🆔 <b>ID:</b> <code>${user?.id || 'N/A'}</code>`,
+                    { parse_mode: 'HTML' }
+                );
+                return res.json({ success: true });
+            }
+            res.status(500).json({ success: false, message: 'Admin ID not configured' });
+        } catch (e) {
+            console.error('[Request Movie Error]:', e.message);
+            res.status(500).json({ success: false, error: e.message });
+        }
+    });
+    
 
     router.post('/send-file', async (req, res) => {
         const { fileId, fileType, movieTitle, label, chatId } = req.body;
