@@ -209,7 +209,7 @@ module.exports = function setupBotHandlers(bot) {
             try {
                 const movie = await Movie.findOneAndUpdate(
                     { title: new RegExp(`^${movieName}$`, 'i') },
-                    { thumbFileId: photoId },
+                    { thumbFileId: photoId, poster: null },
                     { new: true }
                 );
                 if (movie) bot.sendMessage(msg.chat.id, `✅ <b>"${movie.title}"</b> का पोस्टर बदल दिया गया!`, { parse_mode: 'HTML' });
@@ -289,11 +289,12 @@ module.exports = function setupBotHandlers(bot) {
             try {
                 const tmdbData = await fetchTMDBData(cleanTitle);
                 const finalMovieTitle = tmdbData?.officialTitle || cleanTitle;
-                const poster = tmdbData?.poster || `https://placehold.co/400x600/161b22/e50914?text=${encodeURIComponent(finalMovieTitle)}`;
+                
+                // TMDB से पोस्टर न मिलने पर null रखेंगे ताकि फ़ाइल का Telegram Thumbnail काम करे
+                const poster = tmdbData?.poster || null;
                 const rating = tmdbData?.rating || '8.0';
                 const year = tmdbData?.year || detectedYear;
 
-                // कैटेगरी ऑटो-प्रायोरिटी लॉजिक
                 let finalCategory = tmdbData?.category || 'Movie';
                 if (isSeries) {
                     finalCategory = 'Web Series';
@@ -329,7 +330,7 @@ module.exports = function setupBotHandlers(bot) {
                 } else {
                     movie = new Movie({
                         title: finalMovieTitle,
-                        poster,
+                        poster: poster,
                         rating,
                         year,
                         category: finalCategory,
