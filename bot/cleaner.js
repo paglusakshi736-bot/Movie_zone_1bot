@@ -5,8 +5,9 @@ function parseMediaInfo(rawText) {
 
     let text = rawText.split('\n')[0].replace(/\.(mp4|mkv|avi|mov|zip|rar)/gi, '');
 
+    // साल निकालना (1900-2099)
     let yearMatch = text.match(/\b(19\d\d|20\d\d)\b/);
-    let detectedYear = yearMatch ? yearMatch[0] : '2026';
+    let detectedYear = yearMatch ? yearMatch[0] : null;
 
     let isSeries = /(s\d+|season|episode|ep\s*\d+|complete\s*series|series|web\s*series|all\s*part|part\s*\d+)/i.test(text);
     let isDubbed = /(hindi|dubbed|dual\s*audio)/i.test(text);
@@ -48,7 +49,7 @@ function parseMediaInfo(rawText) {
 
     clean = clean.split(' ').map(w => w.charAt(0).toUpperCase() + w.slice(1).toLowerCase()).join(' ');
 
-    return { cleanTitle: clean, label, isSeries, isDubbed, detectedYear };
+    return { cleanTitle: clean, label, isSeries, isDubbed, detectedYear: detectedYear || '2026' };
 }
 
 function formatBytes(bytes) {
@@ -58,23 +59,39 @@ function formatBytes(bytes) {
     return (bytes / Math.pow(1024, i)).toFixed(1) + ' ' + sizes[i];
 }
 
-async function fetchTMDBData(title) {
+async function fetchTMDBData(title, year = null) {
     const TMDB_KEY = process.env.TMDB_API_KEY;
     if (!TMDB_KEY) return null;
     try {
-        const res = await axios.get(`https://api.themoviedb.org/3/search/multi`, {
-            params: { api_key: TMDB_KEY, query: title },
-            timeout: 6000
-        });
+        const params = { api_key: TMDB_KEY, query: title };
+        if (year && year !== '2026') {
+            params.year = year;
+            params.primary_release_year = year;
+        }
+
+        const res = await axios.get(`https://api.themoviedb.org/3/search/multi`, { params, timeout: 6000 });
 
         if (res.data && res.data.results && res.data.results.length > 0) {
-            const first = res.data.results.find(r => r.poster_path) || res.data.results[0];
-            const officialTitle = first.title || first.name || title;
-            const posterPath = first.poster_path ? `https://image.tmdb.org/t/p/w500${first.poster_path}` : null;
-            const lang = (first.original_language || '').toLowerCase();
+            const validResults = res.data.results.filter(r => r.poster_path);
+            
+            let matched = validResults.find(r => {
+                const name = (r.title || r.name || '').toLowerCase();
+                return name === title.toLowerCase();
+            });
+
+            if (!matched && validResults.length > 0) {
+                validResults.sort((a, b) => (b.popularity || 0) - (a.popularity || 0));
+                matched = validResults[0];
+            }
+
+            if (!matched) matched = res.data.results[0];
+
+            const officialTitle = matched.title || matched.name || title;
+            const posterPath = matched.poster_path ? `https://image.tmdb.org/t/p/w500${matched.poster_path}` : null;
+            const lang = (matched.original_language || '').toLowerCase();
 
             let tmdbCategory = 'Movie';
-            if (first.media_type === 'tv') {
+            if (matched.media_type === 'tv') {
                 tmdbCategory = 'Web Series';
             } else if (lang === 'en') {
                 tmdbCategory = 'Hollywood';
@@ -87,8 +104,8 @@ async function fetchTMDBData(title) {
             return {
                 officialTitle: officialTitle,
                 poster: posterPath,
-                rating: first.vote_average ? first.vote_average.toFixed(1) : '8.0',
-                year: (first.release_date || first.first_air_date || '').split('-')[0] || '2026',
+                rating: matched.vote_average ? matched.vote_average.toFixed(1) : '8.0',
+                year: (matched.release_date || matched.first_air_date || '').split('-')[0] || year || '2026',
                 category: tmdbCategory
             };
         }
