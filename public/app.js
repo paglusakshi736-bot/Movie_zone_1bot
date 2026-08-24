@@ -76,10 +76,20 @@ function renderFilteredMovies() {
 
 function renderMovies(movies) {
     const container = document.getElementById('moviesContainer');
-    if (!movies || movies.length === 0) {
-        container.innerHTML = '<div class="loader">No Movies Found</div>';
-        return;
-    }
+            if (!movies || movies.length === 0) {
+            const searchInput = document.getElementById('searchInput');
+            const query = searchInput ? searchInput.value.trim() : '';
+            container.innerHTML = `
+                <div style="grid-column: 1 / -1; text-align: center; padding: 40px 15px;">
+                    <div style="font-size: 40px; margin-bottom: 10px;">🔍</div>
+                    <p style="color: #8b949e; font-size: 15px; margin-bottom: 15px;">"${query || 'यह फ़िल्म'}" अभी उपलब्ध नहीं है!</p>
+                    <button onclick="sendMovieRequest('${query}')" style="background: linear-gradient(135deg, #e50914, #b20710); color: white; border: none; padding: 10px 22px; border-radius: 25px; font-weight: bold; cursor: pointer; box-shadow: 0 4px 12px rgba(229,9,20,0.4);">
+                        📩 Request This Movie
+                    </button>
+                </div>
+            `;
+            return;
+        }
 
     container.innerHTML = movies.map(m => {
         const fileCount = m.files ? m.files.length : 1;
