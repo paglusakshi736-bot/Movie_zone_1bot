@@ -46,6 +46,7 @@ mongoose.connect(MONGO_URI)
             { command: 'shortener', description: 'Enable/Disable Shortener' },
             { command: 'setshortener', description: 'Set Shortener Domain & API' },
             { command: 'broadcast', description: 'Send message to all users' }
+            { command: 'request', description: 'Request any movie/series' },
         ]).catch(() => {});
 
         app.listen(PORT, '0.0.0.0', () => console.log(`🚀 Server running on port ${PORT}`));
