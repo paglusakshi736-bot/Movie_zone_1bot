@@ -113,7 +113,16 @@ module.exports = function setupBotHandlers(bot) {
             bot.sendMessage(msg.chat.id, `📊 <b>लाइव स्टेटिस्टिक्स</b>\n\n👥 <b>कुल यूज़र्स:</b> ${totalUsers}\n🎬 <b>कुल मूवी कार्ड्स:</b> ${totalMovies}\n📂 <b>कुल फाइल्स:</b> ${totalFiles}`, { parse_mode: 'HTML' });
         } catch (e) { bot.sendMessage(msg.chat.id, "❌ एरर: " + e.message); }
     });
-
+    bot.onText(/\/cleardb/, async (msg) => {
+        if (!isAdmin(msg.from.id)) return;
+        try {
+            const result = await Movie.deleteMany({});
+            bot.sendMessage(msg.chat.id, `🗑️ <b>डेटाबेस पूरा साफ़ हो गया!</b>\nकुल <b>${result.deletedCount}</b> मूवीज़ हटा दी गईं।`, { parse_mode: 'HTML' });
+        } catch (e) { 
+            bot.sendMessage(msg.chat.id, "❌ एरर: " + e.message); 
+        }
+    });
+    
     bot.onText(/\/broadcast (.+)/, async (msg, match) => {
         if (!isAdmin(msg.from.id)) return;
         const textToSend = match[1];
