@@ -1,10 +1,9 @@
 const axios = require('axios');
 
 function parseMediaInfo(rawText) {
-    if (!rawText) return { cleanTitle: 'Movie ' + new Date().toLocaleDateString('en-GB'), label: 'Standard', isSeries: false, isDubbed: false, detectedYear: '2026' };
+    if (!rawText) return { cleanTitle: 'Movie', label: 'Standard Quality', isSeries: false, isDubbed: false, detectedYear: '2026' };
 
-    let text = rawText.split('\n')[0];
-    text = text.replace(/[\._\-]/g, ' ');
+    let text = rawText.split('\n')[0].replace(/\.(mp4|mkv|avi|mov|zip|rar)/gi, '');
 
     let yearMatch = text.match(/\b(19\d\d|20\d\d)\b/);
     let detectedYear = yearMatch ? yearMatch[0] : '2026';
@@ -30,8 +29,8 @@ function parseMediaInfo(rawText) {
     let clean = text
         .replace(/\[.*?\]/g, ' ')
         .replace(/\(.*?\)/g, ' ')
+        .replace(/[\._\-]/g, ' ')
         .replace(/(https?:\/\/[^\s]+|t\.me\/[^\s]+|www\.[^\s]+|@\w+)/gi, ' ')
-        .replace(/\b(mp4|mkv|avi|mov|zip|rar)\b/gi, ' ')
         .replace(/(480p|720p|1080p|2160p|4k|webdl|web-dl|web\s*dl|webrip|bluray|hdrip|dvdrip|predvd|hdtc|esub|subs?|subtitles?)/gi, ' ')
         .replace(/(x264|x265|hevc|h[\s\._-]*264|h[\s\._-]*265|avc|10bit|hdr|dv|aac2[\s\._-]*0|aac|amzn|ddp5[\s\._-]*1|ddp2[\s\._-]*0|ddp|dd\+|hindi|english|telugu|tamil|korean|dubbed|multi|dual\s*audio|org|original|hq|hd|full|mkv|nf|uplay|paramount|official|cinema|south\s*movie|south|movie|complete\s*web\s*series|complete\s*series|web\s*series|combined|all\s*part|part\s*\d+)/gi, ' ')
         .replace(/\b(s\d+|season\s*\d+|ep\s*\d+|episode\s*\d+)\b/gi, ' ')
@@ -39,12 +38,14 @@ function parseMediaInfo(rawText) {
         .replace(/\b(2[\s\._-]*0|5[\s\._-]*1|7[\s\._-]*1)\b/gi, ' ')
         .replace(/\b265\b|\b264\b/gi, ' ')
         .replace(/\b[a-zA-Z0-9]{8,}\b/g, ' ')
-        .replace(/\b[a-zA-Z]\b/g, ' ')
         .replace(/[^\w\s]/gi, ' ')
         .replace(/\s+/g, ' ')
         .trim();
 
-    if (clean.length < 2) clean = 'Movie ' + new Date().toLocaleDateString('en-GB');
+    if (clean.length < 2) {
+        clean = rawText.split(/[\s\.\-_]+/)[0] || 'Movie';
+    }
+
     clean = clean.split(' ').map(w => w.charAt(0).toUpperCase() + w.slice(1).toLowerCase()).join(' ');
 
     return { cleanTitle: clean, label, isSeries, isDubbed, detectedYear };
@@ -72,7 +73,6 @@ async function fetchTMDBData(title) {
             const posterPath = first.poster_path ? `https://image.tmdb.org/t/p/w500${first.poster_path}` : null;
             const lang = (first.original_language || '').toLowerCase();
 
-            // TMDB भाषा से ऑटो कैटेगरी पहचान
             let tmdbCategory = 'Movie';
             if (first.media_type === 'tv') {
                 tmdbCategory = 'Web Series';
