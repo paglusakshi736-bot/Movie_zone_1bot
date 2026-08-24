@@ -36,18 +36,19 @@ mongoose.connect(MONGO_URI)
     .then(async () => {
         console.log('✅ Connected to MongoDB Successfully');
         
-        bot.setMyCommands([
+                bot.setMyCommands([
             { command: 'start', description: 'Open Movie Store' },
             { command: 'stats', description: 'View bot statistics' },
-            { command: 'manage', description: 'Multi-Select Delete movies (Supports pages & search)' },
+            { command: 'manage', description: 'Multi-Select Delete movies (Supports pages)' },
             { command: 'forcesub', description: 'Enable/Disable Join Lock' },
             { command: 'setchannel', description: 'Set Channel for Join Lock' },
             { command: 'setgroup', description: 'Set Group for Join Lock' },
             { command: 'shortener', description: 'Enable/Disable Shortener' },
             { command: 'setshortener', description: 'Set Shortener Domain & API' },
-            { command: 'broadcast', description: 'Send message to all users' }
-            { command: 'request', description: 'Request any movie/series' },
+            { command: 'broadcast', description: 'Send message to all users' },
+            { command: 'request', description: 'Request any movie/series' }
         ]).catch(() => {});
+        
 
         app.listen(PORT, '0.0.0.0', () => console.log(`🚀 Server running on port ${PORT}`));
     })
