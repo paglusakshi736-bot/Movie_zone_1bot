@@ -122,6 +122,26 @@ module.exports = function setupBotHandlers(bot) {
             bot.sendMessage(msg.chat.id, "❌ एरर: " + e.message); 
         }
     });
+        // 📩 Telegram Bot /request कमांड
+    bot.onText(/\/request(?:\s+(.+))?/, async (msg, match) => {
+        const reqMovie = match[1] ? match[1].trim() : '';
+        if (!reqMovie) {
+            return bot.sendMessage(msg.chat.id, "⚠️ <b>तरीका:</b> <code>/request Movie Ka Naam</code>", { parse_mode: 'HTML' });
+        }
+
+        const user = msg.from;
+        const adminId = ADMIN_ID ? ADMIN_ID.split(',')[0].trim() : null;
+
+        if (adminId) {
+            await bot.sendMessage(
+                adminId,
+                `📩 <b>नई मूवी रिक्वेस्ट (Bot Command)!</b>\n\n🎬 <b>मूवी:</b> ${reqMovie}\n👤 <b>यूज़र:</b> ${user.first_name || 'User'} (@${user.username || 'N/A'})\n🆔 <b>ID:</b> <code>${user.id}</code>`,
+                { parse_mode: 'HTML' }
+            );
+        }
+
+        bot.sendMessage(msg.chat.id, `✅ आपकी रिक्वेस्ट <b>"${reqMovie}"</b> एडमिन को भेज दी गई है! जल्द ही अपलोड कर दी जाएगी।`, { parse_mode: 'HTML' });
+    });
     
     bot.onText(/\/broadcast (.+)/, async (msg, match) => {
         if (!isAdmin(msg.from.id)) return;
