@@ -1,7 +1,9 @@
 const axios = require('axios');
 
 function parseMediaInfo(rawText) {
-    if (!rawText) return { cleanTitle: 'Movie', label: 'Standard Quality', isSeries: false, isDubbed: false, detectedYear: '2026' };
+    if (!rawText || typeof rawText !== 'string' || rawText.trim() === '') {
+        return { cleanTitle: '', label: 'Standard Quality', isSeries: false, isDubbed: false, detectedYear: null };
+    }
 
     let text = rawText.split('\n')[0].replace(/\.(mp4|mkv|avi|mov|zip|rar)/gi, '');
 
@@ -9,7 +11,7 @@ function parseMediaInfo(rawText) {
     let yearMatch = text.match(/\b(19\d\d|20\d\d)\b/);
     let detectedYear = yearMatch ? yearMatch[0] : null;
 
-    let isSeries = /(s\d+|season|episode|ep\s*\d+|complete\s*series|series|web\s*series|all\s*part|part\s*\d+)/i.test(text);
+    let isSeries = /(s\d+|season|episode|ep\s*\d+|complete\s*series|series|web\s*series|all\s*part|part\s*\d+|ds)/i.test(text);
     let isDubbed = /(hindi|dubbed|dual\s*audio)/i.test(text);
 
     let qualityMatch = text.match(/(480p|720p|1080p|2160p|4k|hd|sd)/i);
@@ -33,7 +35,7 @@ function parseMediaInfo(rawText) {
         .replace(/[\._\-]/g, ' ')
         .replace(/(https?:\/\/[^\s]+|t\.me\/[^\s]+|www\.[^\s]+|@\w+)/gi, ' ')
         .replace(/(480p|720p|1080p|2160p|4k|webdl|web-dl|web\s*dl|webrip|bluray|hdrip|dvdrip|predvd|hdtc|esub|subs?|subtitles?)/gi, ' ')
-        .replace(/(x264|x265|hevc|h[\s\._-]*264|h[\s\._-]*265|avc|10bit|hdr|dv|aac2[\s\._-]*0|aac|amzn|ddp5[\s\._-]*1|ddp2[\s\._-]*0|ddp|dd\+|hindi|english|telugu|tamil|korean|dubbed|multi|dual\s*audio|org|original|hq|hd|full|mkv|nf|uplay|paramount|official|cinema|south\s*movie|south|movie|complete\s*web\s*series|complete\s*series|web\s*series|combined|all\s*part|part\s*\d+)/gi, ' ')
+        .replace(/(x264|x265|hevc|h[\s\._-]*264|h[\s\._-]*265|avc|10bit|hdr|dv|aac2[\s\._-]*0|aac|amzn|ddp5[\s\._-]*1|ddp2[\s\._-]*0|ddp|dd\+|hindi|english|telugu|tamil|korean|dubbed|multi|dual\s*audio|org|original|hq|hd|full|mkv|nf|uplay|paramount|official|cinema|south\s*movie|south|movie|complete\s*web\s*series|complete\s*series|web\s*series|series|combined|all\s*part|part\s*\d+|ds)/gi, ' ')
         .replace(/\b(s\d+|season\s*\d+|ep\s*\d+|episode\s*\d+)\b/gi, ' ')
         .replace(/\b(19\d\d|20\d\d)\b/g, ' ')
         .replace(/\b(2[\s\._-]*0|5[\s\._-]*1|7[\s\._-]*1)\b/gi, ' ')
@@ -43,13 +45,9 @@ function parseMediaInfo(rawText) {
         .replace(/\s+/g, ' ')
         .trim();
 
-    if (clean.length < 2) {
-        clean = rawText.split(/[\s\.\-_]+/)[0] || 'Movie';
-    }
-
     clean = clean.split(' ').map(w => w.charAt(0).toUpperCase() + w.slice(1).toLowerCase()).join(' ');
 
-    return { cleanTitle: clean, label, isSeries, isDubbed, detectedYear: detectedYear || '2026' };
+    return { cleanTitle: clean, label, isSeries, isDubbed, detectedYear: detectedYear || null };
 }
 
 function formatBytes(bytes) {
@@ -61,21 +59,17 @@ function formatBytes(bytes) {
 
 async function fetchTMDBData(title, year = null, isSeries = false) {
     const TMDB_KEY = process.env.TMDB_API_KEY;
-    if (!TMDB_KEY) return null;
+    if (!TMDB_KEY || !title) return null;
     try {
         const endpoint = isSeries ? 'search/tv' : 'search/movie';
         const params = { api_key: TMDB_KEY, query: title };
-        if (year && year !== '2026') {
-            if (isSeries) {
-                params.first_air_date_year = year;
-            } else {
-                params.primary_release_year = year;
-            }
+        if (year) {
+            if (isSeries) params.first_air_date_year = year;
+            else params.primary_release_year = year;
         }
 
         let res = await axios.get(`https://api.themoviedb.org/3/${endpoint}`, { params, timeout: 6000 });
 
-        // अगर साल के साथ नहीं मिला तो बिना साल के बैकअप सर्च
         if ((!res.data || !res.data.results || res.data.results.length === 0) && year) {
             delete params.primary_release_year;
             delete params.first_air_date_year;
@@ -84,11 +78,8 @@ async function fetchTMDBData(title, year = null, isSeries = false) {
 
         if (res.data && res.data.results && res.data.results.length > 0) {
             const results = res.data.results.filter(r => r.poster_path);
-            
-            // 1. एग्जैक्ट टाइटल मैच ढूंढें
             let matched = results.find(r => (r.title || r.name || '').toLowerCase() === title.toLowerCase());
 
-            // 2. नहीं तो सबसे पॉपुलर रिजल्ट
             if (!matched && results.length > 0) {
                 results.sort((a, b) => (b.popularity || 0) - (a.popularity || 0));
                 matched = results[0];
