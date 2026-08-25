@@ -32,10 +32,7 @@ function getGridElement() {
 
 async function loadMovies() {
     const grid = getGridElement();
-    if (!grid) {
-        console.error('Movie grid container not found in HTML');
-        return;
-    }
+    if (!grid) return;
     
     grid.innerHTML = '<div style="color:#94a3b8;grid-column:1/-1;text-align:center;padding:30px;">लोड हो रहा है...</div>';
 
@@ -48,7 +45,6 @@ async function loadMovies() {
         const res = await fetch(url);
         const data = await res.json();
 
-        // Array या Object { movies: [...] } दोनों को सपोर्ट करेगा
         const moviesList = Array.isArray(data) ? data : (data.movies || []);
 
         if (moviesList.length === 0) {
@@ -85,8 +81,16 @@ async function loadMovies() {
             grid.appendChild(card);
         });
     } catch (err) {
-        console.error('Error loading movies:', err);
         grid.innerHTML = '<div style="color:#ef4444;grid-column:1/-1;text-align:center;padding:20px;">डेटा लोड करने में एरर आया!</div>';
+    }
+}
+
+function downloadFile(fileId) {
+    const url = `https://t.me/${botUsername}?start=file_${fileId}`;
+    if (tg && tg.openTelegramLink) {
+        tg.openTelegramLink(url);
+    } else {
+        window.location.href = url;
     }
 }
 
@@ -94,7 +98,6 @@ function openDownloadModal(movie) {
     let modal = document.getElementById('movieModal') || document.getElementById('downloadModal');
     let modalBody = document.getElementById('modalBody') || document.getElementById('modal-body');
 
-    // अगर HTML में Modal नहीं है तो डायनामिक बना दें
     if (!modal) {
         modal = document.createElement('div');
         modal.id = 'movieModal';
@@ -141,7 +144,7 @@ function openDownloadModal(movie) {
                 episodesHtml += `
                     <div class="episode-item" style="display:flex;justify-content:space-between;align-items:center;background:#0f172a;border:1px solid #334155;padding:10px 12px;border-radius:8px;">
                         <span class="episode-name" style="font-size:12px;font-weight:500;color:#e2e8f0;">${f.label}</span>
-                        <a href="https://t.me/${botUsername}?start=file_${f.fileId}" class="episode-dl-btn" style="background:#2563eb;color:#fff;border:none;padding:6px 12px;border-radius:6px;font-size:12px;font-weight:600;cursor:pointer;text-decoration:none;" target="_blank">Get File</a>
+                        <button onclick="downloadFile('${f.fileId}')" class="episode-dl-btn" style="background:#2563eb;color:#fff;border:none;padding:6px 12px;border-radius:6px;font-size:12px;font-weight:600;cursor:pointer;">Get File</button>
                     </div>
                 `;
             });
@@ -171,7 +174,7 @@ function openDownloadModal(movie) {
             filesHtml += `
                 <div class="episode-item" style="display:flex;justify-content:space-between;align-items:center;background:#0f172a;border:1px solid #334155;padding:10px 12px;border-radius:8px;">
                     <span class="episode-name" style="font-size:12px;font-weight:500;color:#e2e8f0;">${f.label}</span>
-                    <a href="https://t.me/${botUsername}?start=file_${f.fileId}" class="episode-dl-btn" style="background:#2563eb;color:#fff;border:none;padding:6px 12px;border-radius:6px;font-size:12px;font-weight:600;cursor:pointer;text-decoration:none;" target="_blank">Get File</a>
+                    <button onclick="downloadFile('${f.fileId}')" class="episode-dl-btn" style="background:#2563eb;color:#fff;border:none;padding:6px 12px;border-radius:6px;font-size:12px;font-weight:600;cursor:pointer;">Get File</button>
                 </div>
             `;
         });
@@ -250,11 +253,9 @@ async function submitMovieRequest() {
     }
 }
 
-// इवेंट लिसनर्स (सर्च, फ़िल्टर और कैटेगरीज)
 document.addEventListener('DOMContentLoaded', () => {
     initApp();
 
-    // सर्च इनपुट
     const searchInput = document.getElementById('searchInput') || document.querySelector('input[type="search"]') || document.querySelector('.search-box input');
     if (searchInput) {
         searchInput.addEventListener('input', (e) => {
@@ -263,7 +264,6 @@ document.addEventListener('DOMContentLoaded', () => {
         });
     }
 
-    // कैटेगरी बटन्स
     const catButtons = document.querySelectorAll('.cat-btn, .category-btn, .tab-item');
     catButtons.forEach(btn => {
         btn.addEventListener('click', (e) => {
@@ -272,7 +272,6 @@ document.addEventListener('DOMContentLoaded', () => {
             target.classList.add('active');
             
             let cat = target.getAttribute('data-cat') || target.innerText.trim();
-            // '🔥 Latest' या '🎬 Hollywood' से इमोजी हटाना
             cat = cat.replace(/[^\w\s]/gi, '').trim();
             currentCategory = cat || 'All';
             loadMovies();
