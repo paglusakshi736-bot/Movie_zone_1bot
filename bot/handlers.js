@@ -215,21 +215,41 @@ module.exports = function setupBotHandlers(bot) {
         }
     });
 
-    bot.onText(/\/rename (.+)/, async (msg, match) => {
+        bot.onText(/\/rename (.+)/, async (msg, match) => {
         if (!isAdmin(msg.from.id)) return;
         const parts = match[1].split('=');
         if (parts.length !== 2) return bot.sendMessage(msg.chat.id, "⚠️ तरीका: <code>/rename Purana = Naya</code>", { parse_mode: 'HTML' });
 
+        const oldTitle = parts[0].trim();
+        const newTitle = parts[1].trim();
+
         try {
+            // नए नाम से TMDB का ओरिजिनल डेटा खोजना
+            const tmdbData = await fetchTMDBData(newTitle);
+            const finalTitle = tmdbData?.officialTitle || newTitle;
+            const poster = tmdbData?.poster || null;
+            const rating = tmdbData?.rating || '8.0';
+            const year = tmdbData?.year || '2026';
+
+            const updateFields = { title: finalTitle, rating, year };
+            if (poster) updateFields.poster = poster;
+
             const movie = await Movie.findOneAndUpdate(
-                { title: new RegExp(`^${parts[0].trim()}$`, 'i') },
-                { title: parts[1].trim() },
+                { title: new RegExp(`^${oldTitle}$`, 'i') },
+                updateFields,
                 { new: true }
             );
-            if (movie) bot.sendMessage(msg.chat.id, `✅ नाम बदलकर <b>"${movie.title}"</b> कर दिया गया!`, { parse_mode: 'HTML' });
-            else bot.sendMessage(msg.chat.id, `❌ मूवी नहीं मिली।`);
-        } catch (e) { bot.sendMessage(msg.chat.id, "❌ एरर: " + e.message); }
+
+            if (movie) {
+                bot.sendMessage(msg.chat.id, `✅ नाम बदलकर <b>"${movie.title}"</b> कर दिया गया और TMDB पोस्टर अपडेट हो गया!`, { parse_mode: 'HTML' });
+            } else {
+                bot.sendMessage(msg.chat.id, `❌ मूवी नहीं मिली।`);
+            }
+        } catch (e) { 
+            bot.sendMessage(msg.chat.id, "❌ एरर: " + e.message); 
+        }
     });
+    
 
     bot.on('photo', async (msg) => {
         if (!isAdmin(msg.from.id)) return;
