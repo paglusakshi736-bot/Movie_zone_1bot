@@ -5,7 +5,7 @@ const ADMIN_ID = process.env.ADMIN_ID;
 const adminDeleteSessions = {};
 const PAGE_LIMIT = 8;
 let uploadQueue = Promise.resolve();
-const adminFileQueue = {}; // मल्टीपल फाइल्स की कतार
+const adminFileQueue = {};
 
 async function processNextPendingFile(bot, chatId) {
     if (!adminFileQueue[chatId] || adminFileQueue[chatId].length === 0) return;
@@ -82,15 +82,44 @@ async function renderDeletePanel(bot, chatId, messageId = null, page = 1, search
 }
 
 module.exports = function setupBotHandlers(bot) {
+    // 1. Start Command with Referral Tracking
     bot.onText(/\/start(?:\s+(.+))?/, async (msg, match) => {
         try {
-            await User.findOneAndUpdate(
-                { userId: msg.from.id.toString() },
-                { userId: msg.from.id.toString(), username: msg.from.username || '', firstName: msg.from.first_name || '' },
-                { upsert: true, new: true }
-            );
+            const currentUserId = msg.from.id.toString();
+            const payload = match[1] ? match[1].trim() : '';
 
-            const payload = match[1];
+            let user = await User.findOne({ userId: currentUserId });
+
+            if (!user) {
+                let referredBy = null;
+                if (payload.startsWith('ref_')) {
+                    const referrerId = payload.replace('ref_', '');
+                    if (referrerId !== currentUserId) {
+                        referredBy = referrerId;
+                        const referrer = await User.findOneAndUpdate(
+                            { userId: referrerId },
+                            { $inc: { referralCount: 1, availableCredits: 1 } },
+                            { new: true }
+                        );
+                        if (referrer) {
+                            bot.sendMessage(
+                                referrerId,
+                                `🎉 <b>बधाई हो!</b> आपके इनवाइट लिंक से <b>${msg.from.first_name || 'नया यूज़र'}</b> जुड़ा है।\nआपको <b>+1 एक्स्ट्रा रिक्वेस्ट क्रेडिट</b> मिला!`,
+                                { parse_mode: 'HTML' }
+                            ).catch(() => {});
+                        }
+                    }
+                }
+
+                user = new User({
+                    userId: currentUserId,
+                    username: msg.from.username || '',
+                    firstName: msg.from.first_name || '',
+                    referredBy: referredBy
+                });
+                await user.save();
+            }
+
             if (payload && payload.startsWith('file_')) {
                 const fileId = payload.replace('file_', '');
                 return bot.sendDocument(msg.chat.id, fileId, {
@@ -110,6 +139,100 @@ module.exports = function setupBotHandlers(bot) {
             });
         } catch (e) {
             console.error('[Start Error]:', e.message);
+        }
+    });
+
+    // 2. Invite / Refer Command
+    bot.onText(/\/(invite|refer)/, async (msg) => {
+        try {
+            const user = await User.findOne({ userId: msg.from.id.toString() });
+            const botInfo = await bot.getMe();
+            const inviteLink = `https://t.me/${botInfo.username}?start=ref_${msg.from.id}`;
+            const credits = user ? (user.availableCredits || 0) : 0;
+            const totalRef = user ? (user.referralCount || 0) : 0;
+
+            const text = `🎁 <b>रेफरल प्रोग्राम (Refer & Earn)</b>\n\n` +
+                `📌 <b>नियम:</b> हर यूज़र प्रतिदिन <b>1 फ़्री मूवी रिक्वेस्ट</b> कर सकता है। अतिरिक्त रिक्वेस्ट करने के लिए अपने दोस्तों को इनवाइट करें!\n\n` +
+                `📊 <b>आपका स्टेट्स:</b>\n` +
+                `• कुल इनवाइट: <b>${totalRef}</b>\n` +
+                `• उपलब्ध एक्स्ट्रा क्रेडिट्स: <b>${credits}</b>\n\n` +
+                `🔗 <b>आपका इनवाइट लिंक:</b>\n<code>${inviteLink}</code>\n\n` +
+                `<i>(हर 1 नए दोस्त के जुड़ने पर आपको +1 रिक्वेस्ट क्रेडिट मिलेगा!)</i>`;
+
+            bot.sendMessage(msg.chat.id, text, {
+                parse_mode: 'HTML',
+                reply_markup: {
+                    inline_keyboard: [
+                        [{ text: '📤 Share Invite Link', url: `https://t.me/share/url?url=${encodeURIComponent(inviteLink)}&text=${encodeURIComponent('Join Movie Zone for latest movies!')}` }]
+                    ]
+                }
+            });
+        } catch (e) {
+            bot.sendMessage(msg.chat.id, "❌ एरर: " + e.message);
+        }
+    });
+
+    // 3. Request Command with Daily Limit & Referral Check
+    bot.onText(/\/request(?:\s+(.+))?/, async (msg, match) => {
+        const reqMovie = match[1] ? match[1].trim() : '';
+        if (!reqMovie) {
+            return bot.sendMessage(msg.chat.id, "⚠️ <b>तरीका:</b> <code>/request Movie Ka Naam</code>", { parse_mode: 'HTML' });
+        }
+
+        const userId = msg.from.id.toString();
+        const today = new Date().toISOString().split('T')[0];
+
+        try {
+            let user = await User.findOne({ userId });
+            if (!user) {
+                user = new User({ userId, username: msg.from.username || '', firstName: msg.from.first_name || '' });
+                await user.save();
+            }
+
+            const botInfo = await bot.getMe();
+            const inviteLink = `https://t.me/${botInfo.username}?start=ref_${userId}`;
+            const hasUsedDailyFree = (user.lastRequestDate === today);
+
+            if (hasUsedDailyFree) {
+                if (!user.availableCredits || user.availableCredits < 1) {
+                    return bot.sendMessage(
+                        msg.chat.id,
+                        `⚠️ <b>आपकी आज की 1 फ़्री रिक्वेस्ट पूरी हो चुकी है!</b>\n\n` +
+                        `आज और रिक्वेस्ट करने के लिए दोस्तों को इनवाइट करें। हर इनवाइट पर 1 एक्स्ट्रा रिक्वेस्ट मिलेगी!\n\n` +
+                        `🔗 <b>आपका इनवाइट लिंक:</b>\n<code>${inviteLink}</code>`,
+                        {
+                            parse_mode: 'HTML',
+                            reply_markup: {
+                                inline_keyboard: [
+                                    [{ text: '📤 Invite Friends', url: `https://t.me/share/url?url=${encodeURIComponent(inviteLink)}&text=${encodeURIComponent('Join Movie Zone!')}` }]
+                                ]
+                            }
+                        }
+                    );
+                } else {
+                    user.availableCredits -= 1;
+                }
+            } else {
+                user.lastRequestDate = today;
+            }
+
+            await user.save();
+
+            const adminIds = ADMIN_ID ? ADMIN_ID.split(',').map(id => id.trim()) : [];
+            const requestText = `📩 <b>नई मूवी रिक्वेस्ट!</b>\n\n🎬 <b>मूवी:</b> ${reqMovie}\n👤 <b>यूज़र:</b> ${msg.from.first_name || 'User'} (@${msg.from.username || 'N/A'})\n🆔 <b>ID:</b> <code>${userId}</code>`;
+
+            for (const id of adminIds) {
+                await bot.sendMessage(id, requestText, { parse_mode: 'HTML' }).catch(() => {});
+            }
+
+            bot.sendMessage(
+                msg.chat.id,
+                `✅ आपकी रिक्वेस्ट <b>"${reqMovie}"</b> एडमिन को भेज दी गई है!\n\n` +
+                (hasUsedDailyFree ? `🎟️ <i>(1 रेफरल क्रेडिट इस्तेमाल हुआ। शेष क्रेडिट: ${user.availableCredits})</i>` : `🎁 <i>(दैनिक फ़्री रिक्वेस्ट इस्तेमाल हुई)</i>`),
+                { parse_mode: 'HTML' }
+            );
+        } catch (e) {
+            bot.sendMessage(msg.chat.id, "❌ एरर: " + e.message);
         }
     });
 
@@ -133,22 +256,6 @@ module.exports = function setupBotHandlers(bot) {
         } catch (e) { 
             bot.sendMessage(msg.chat.id, "❌ एरर: " + e.message); 
         }
-    });
-
-    bot.onText(/\/request(?:\s+(.+))?/, async (msg, match) => {
-        const reqMovie = match[1] ? match[1].trim() : '';
-        if (!reqMovie) {
-            return bot.sendMessage(msg.chat.id, "⚠️ <b>तरीका:</b> <code>/request Movie Ka Naam</code>", { parse_mode: 'HTML' });
-        }
-
-        const user = msg.from;
-        const adminIds = ADMIN_ID ? ADMIN_ID.split(',').map(id => id.trim()) : [];
-        const requestText = `📩 <b>नई मूवी रिक्वेस्ट (Bot Command)!</b>\n\n🎬 <b>मूवी:</b> ${reqMovie}\n👤 <b>यूज़र:</b> ${user.first_name || 'User'} (@${user.username || 'N/A'})\n🆔 <b>ID:</b> <code>${user.id}</code>`;
-
-        for (const id of adminIds) {
-            await bot.sendMessage(id, requestText, { parse_mode: 'HTML' }).catch(() => {});
-        }
-        bot.sendMessage(msg.chat.id, `✅ आपकी रिक्वेस्ट <b>"${reqMovie}"</b> एडमिन को भेज दी गई है! जल्द ही अपलोड कर दी जाएगी।`, { parse_mode: 'HTML' });
     });
 
     bot.onText(/\/broadcast (.+)/, async (msg, match) => {
@@ -321,7 +428,6 @@ module.exports = function setupBotHandlers(bot) {
         } catch (e) { bot.sendMessage(msg.chat.id, "❌ एरर: " + e.message); }
     });
 
-    // कॉमन सेव फंक्शन
     async function saveMovieToDB(bot, chatId, titleToUse, fileData) {
         const { fileId, fileType, fileSize, thumbFileId, label, isSeries, isDubbed, detectedYear } = fileData;
         try {
@@ -384,12 +490,10 @@ module.exports = function setupBotHandlers(bot) {
         }
     }
 
-    // फ़ाइल अपलोड और बैच हैंडलर
     bot.on('message', async (msg) => {
         const userId = msg.from ? msg.from.id.toString() : '';
         if (!isAdmin(userId)) return;
 
-        // एडमिन ने नाम का रिप्लाई दिया
         if (msg.text && !msg.text.startsWith('/') && adminFileQueue[msg.chat.id] && adminFileQueue[msg.chat.id].length > 0) {
             const fileData = adminFileQueue[msg.chat.id].shift();
             const enteredTitle = msg.text.trim();
@@ -412,7 +516,6 @@ module.exports = function setupBotHandlers(bot) {
         uploadQueue = uploadQueue.then(async () => {
             let rawInput = msg.caption || file.file_name || '';
 
-            // अगर नाम न मिले तो टेलीग्राम सर्वर पाथ से फ़ाइल नाम ढूंढना
             if (!rawInput && file.file_id) {
                 try {
                     const fileInfo = await bot.getFile(file.file_id);
