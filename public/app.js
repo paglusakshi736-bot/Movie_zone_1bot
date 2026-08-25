@@ -1,267 +1,226 @@
+let botUsername = '';
+let currentCategory = 'All';
+let currentSearch = '';
+
 const tg = window.Telegram?.WebApp;
-if (tg) { tg.expand(); tg.ready(); }
-
-const BACKEND_URL = window.location.origin;
-
-let allMovies = [];
-let watchlist = JSON.parse(localStorage.getItem('user_watchlist') || '[]');
-let currentPendingFile = null;
-let selectedCategory = 'all';
-let selectedYear = 'all';
-
-function setupYearDropdown() {
-    const dropdown = document.getElementById('yearDropdown');
-    const currentYear = 2026;
-    for (let y = currentYear; y >= 1990; y--) {
-        const opt = document.createElement('option');
-        opt.value = y.toString();
-        opt.innerText = y.toString();
-        dropdown.appendChild(opt);
-    }
+if (tg) {
+    tg.ready();
+    tg.expand();
 }
-setupYearDropdown();
 
-async function fetchMovies() {
+async function initApp() {
     try {
-        const res = await fetch(`${BACKEND_URL}/api/movies`);
-        if (!res.ok) throw new Error('Network response failed');
-        allMovies = await res.json();
-        renderTrending();
-        renderFilteredMovies();
-    } catch (err) {
-        document.getElementById('moviesContainer').innerHTML = '<div class="loader" style="color:#ff0844"><i class="fas fa-exclamation-circle"></i> Error loading movies.</div>';
+        const res = await fetch('/api/bot-info');
+        const data = await res.json();
+        botUsername = data.username || '';
+    } catch (e) {
+        console.error('Failed to get bot info:', e);
     }
+    loadMovies();
 }
 
-function renderTrending() {
-    const slider = document.getElementById('trendingSlider');
-    if (!slider) return;
-    const topItems = [...allMovies].sort((a, b) => (b.viewsCount || 0) - (a.viewsCount || 0)).slice(0, 8);
-    if (topItems.length === 0) {
-        document.getElementById('trendingSection').style.display = 'none';
-        return;
-    }
-    document.getElementById('trendingSection').style.display = 'block';
-    slider.innerHTML = topItems.map((m, idx) => `
-        <div class="trending-card" onclick='openSheet(${JSON.stringify(m).replace(/'/g, "&apos;")})'>
-            <span class="rank-badge">#${idx + 1}</span>
-            <img src="${m.poster || (m.thumbFileId ? `${BACKEND_URL}/api/thumb/${m.thumbFileId}` : 'https://placehold.co/400x600/161b22/e50914?text=Poster')}" alt="${m.title}">
-        </div>
-    `).join('');
-}
+async function loadMovies() {
+    const grid = document.getElementById('movieGrid');
+    if (!grid) return;
+    grid.innerHTML = '<div style="color:#94a3b8;grid-column:1/-1;text-align:center;padding:20px;">लोड हो रहा है...</div>';
 
-function renderFilteredMovies() {
-    const searchVal = document.getElementById('searchInput').value.toLowerCase().trim();
+    try {
+        const url = `/api/movies?category=${encodeURIComponent(currentCategory)}&search=${encodeURIComponent(currentSearch)}`;
+        const res = await fetch(url);
+        const data = await res.json();
 
-    let filtered = allMovies.filter(m => {
-        const titleLower = m.title.toLowerCase();
-        const matchesSearch = titleLower.includes(searchVal);
-        
-        let matchesCategory = true;
-        if (selectedCategory === 'watchlist') {
-            matchesCategory = watchlist.includes(m._id);
-        } else if (selectedCategory === 'latest') {
-            // लेटेस्ट रिलीज़: 2026 और 2025 की फ़िल्में
-            matchesCategory = (String(m.year) === '2026' || String(m.year) === '2025');
-        } else if (selectedCategory !== 'all') {
-            matchesCategory = (m.category || '').toLowerCase() === selectedCategory.toLowerCase();
+        if (!data.movies || data.movies.length === 0) {
+            grid.innerHTML = '<div style="color:#94a3b8;grid-column:1/-1;text-align:center;padding:40px;">कोई मूवी/सीरीज़ नहीं मिली।</div>';
+            return;
         }
 
-        const matchesYear = (selectedYear === 'all') || String(m.year) === selectedYear;
-        return matchesSearch && matchesCategory && matchesYear;
-    });
-
-    renderMovies(filtered);
-}
-
-function renderMovies(movies) {
-    const container = document.getElementById('moviesContainer');
-            if (!movies || movies.length === 0) {
-            const searchInput = document.getElementById('searchInput');
-            const query = searchInput ? searchInput.value.trim() : '';
-            container.innerHTML = `
-                <div style="grid-column: 1 / -1; text-align: center; padding: 40px 15px;">
-                    <div style="font-size: 40px; margin-bottom: 10px;">🔍</div>
-                    <p style="color: #8b949e; font-size: 15px; margin-bottom: 15px;">"${query || 'यह फ़िल्म'}" अभी उपलब्ध नहीं है!</p>
-                    <button onclick="sendMovieRequest('${query}')" style="background: linear-gradient(135deg, #e50914, #b20710); color: white; border: none; padding: 10px 22px; border-radius: 25px; font-weight: bold; cursor: pointer; box-shadow: 0 4px 12px rgba(229,9,20,0.4);">
-                        📩 Request This Movie
-                    </button>
+        grid.innerHTML = '';
+        data.movies.forEach(movie => {
+            const card = document.createElement('div');
+            card.className = 'movie-card';
+            const posterSrc = movie.poster || 'https://placehold.co/300x450/1e293b/ffffff?text=No+Poster';
+            
+            card.innerHTML = `
+                <div class="poster-container">
+                    <img src="${posterSrc}" alt="${movie.title}" loading="lazy">
+                    <div class="badge-count">${movie.files ? movie.files.length : 1} Files</div>
+                </div>
+                <div class="movie-info">
+                    <div class="movie-title">${movie.title}</div>
+                    <div class="movie-meta">
+                        <span>⭐ ${movie.rating || '8.0'}</span>
+                        <span>📅 ${movie.year || '2026'}</span>
+                    </div>
+                    <button class="get-files-btn" onclick='openDownloadModal(${JSON.stringify(movie).replace(/'/g, "&apos;")})'>📥 Get Files</button>
                 </div>
             `;
-            return;
+            grid.appendChild(card);
+        });
+    } catch (err) {
+        grid.innerHTML = '<div style="color:#ef4444;grid-column:1/-1;text-align:center;padding:20px;">डेटा लोड करने में एरर आया!</div>';
+    }
+}
+
+function openDownloadModal(movie) {
+    const modal = document.getElementById('movieModal');
+    const modalBody = document.getElementById('modalBody');
+    if (!modal || !modalBody) return;
+
+    if (movie.category === 'Web Series' || movie.isSeries) {
+        const seasons = {};
+        
+        movie.files.forEach(file => {
+            const sMatch = file.label.match(/S(\d+)/i) || file.label.match(/Season\s*(\d+)/i);
+            const seasonNum = sMatch ? `Season ${parseInt(sMatch[1])}` : 'Season 1';
+
+            if (!seasons[seasonNum]) {
+                seasons[seasonNum] = [];
+            }
+            seasons[seasonNum].push(file);
+        });
+
+        const seasonKeys = Object.keys(seasons);
+        let currentSeason = seasonKeys[0] || 'Season 1';
+
+        function renderSeasonView(activeSeason) {
+            let tabsHtml = `<div class="season-tabs">`;
+            seasonKeys.forEach(sName => {
+                tabsHtml += `<button class="tab-btn ${sName === activeSeason ? 'active' : ''}" onclick="switchSeason('${sName}')">${sName}</button>`;
+            });
+            tabsHtml += `</div>`;
+
+            let episodesHtml = `<div class="episode-list">`;
+            seasons[activeSeason].forEach(f => {
+                episodesHtml += `
+                    <div class="episode-item">
+                        <span class="episode-name">${f.label}</span>
+                        <a href="https://t.me/${botUsername}?start=file_${f.fileId}" class="episode-dl-btn" target="_blank">Get File</a>
+                    </div>
+                `;
+            });
+            episodesHtml += `</div>`;
+
+            modalBody.innerHTML = `
+                <div style="display:flex;justify-content:space-between;align-items:flex-start;">
+                    <div>
+                        <h3 style="margin:0;color:#fff;font-size:16px;">${movie.title}</h3>
+                        <p style="font-size:12px;color:#94a3b8;margin:4px 0 8px 0;">⭐ ${movie.rating || '8.0'} | 📅 ${movie.year || '2026'}</p>
+                    </div>
+                    <button class="close-btn" onclick="closeModal()">✕</button>
+                </div>
+                ${tabsHtml}
+                ${episodesHtml}
+            `;
         }
 
-    container.innerHTML = movies.map(m => {
-        const fileCount = m.files ? m.files.length : 1;
-        const posterUrl = m.poster || (m.thumbFileId ? `${BACKEND_URL}/api/thumb/${m.thumbFileId}` : 'https://placehold.co/400x600/161b22/e50914?text=Poster');
-        const isFav = watchlist.includes(m._id);
+        window.switchSeason = function(sName) {
+            renderSeasonView(sName);
+        };
 
-        return `
-            <div class="movie-card">
-                <button class="fav-btn ${isFav ? 'active' : ''}" onclick="toggleWatchlist(event, '${m._id}')">
-                    <i class="fas fa-heart"></i>
-                </button>
-                <div class="poster-box" onclick='openSheet(${JSON.stringify(m).replace(/'/g, "&apos;")})'>
-                    <img src="${posterUrl}" alt="${m.title}" loading="lazy">
-                    <span class="file-badge">${fileCount} Files</span>
-                </div>
-                <div class="card-details">
-                    <h3 class="movie-title">${m.title}</h3>
-                    <div class="card-meta">
-                        <span>⭐ ${m.rating || '8.0'}</span>
-                        <span>📅 ${m.year || '2026'}</span>
-                    </div>
-                    <button class="get-btn" onclick='openSheet(${JSON.stringify(m).replace(/'/g, "&apos;")})'>
-                        <i class="fas fa-download"></i> Get Files
-                    </button>
-                </div>
-            </div>
-        `;
-    }).join('');
-}
-
-function toggleWatchlist(e, id) {
-    e.stopPropagation();
-    if (watchlist.includes(id)) {
-        watchlist = watchlist.filter(item => item !== id);
+        renderSeasonView(currentSeason);
     } else {
-        watchlist.push(id);
-    }
-    localStorage.setItem('user_watchlist', JSON.stringify(watchlist));
-    renderFilteredMovies();
-}
+        let filesHtml = `<div class="episode-list">`;
+        movie.files.forEach(f => {
+            filesHtml += `
+                <div class="episode-item">
+                    <span class="episode-name">${f.label}</span>
+                    <a href="https://t.me/${botUsername}?start=file_${f.fileId}" class="episode-dl-btn" target="_blank">Get File</a>
+                </div>
+            `;
+        });
+        filesHtml += `</div>`;
 
-function openSheet(movie) {
-    document.getElementById('sheetTitle').innerText = movie.title;
-    const filesList = document.getElementById('filesList');
-    
-    const player = document.getElementById('sheetVideoPlayer');
-    player.pause();
-    player.style.display = 'none';
-
-    filesList.innerHTML = movie.files.map(f => `
-        <div class="file-item">
-            <span class="file-label">${f.label}</span>
-            <div class="action-btns">
-                <button class="stream-action-btn" onclick='playInlineStream("${f.fileId}")'>
-                    <i class="fas fa-play"></i> Watch
-                </button>
-                <button class="dl-action-btn" onclick='downloadFile("${f.fileId}", "${f.fileType}", "${movie.title.replace(/'/g, "\\'")}", "${f.label}")'>
-                    <i class="fas fa-download"></i> Get
-                </button>
+        modalBody.innerHTML = `
+            <div style="display:flex;justify-content:space-between;align-items:flex-start;">
+                <div>
+                    <h3 style="margin:0;color:#fff;font-size:16px;">${movie.title}</h3>
+                    <p style="font-size:12px;color:#94a3b8;margin:4px 0 12px 0;">⭐ ${movie.rating || '8.0'} | 📅 ${movie.year || '2026'}</p>
+                </div>
+                <button class="close-btn" onclick="closeModal()">✕</button>
             </div>
-        </div>
-    `).join('');
-
-    document.getElementById('sheetOverlay').classList.add('active');
-    document.getElementById('bottomSheet').classList.add('active');
-}
-
-function playInlineStream(fileId) {
-    const player = document.getElementById('sheetVideoPlayer');
-    player.src = `${BACKEND_URL}/api/stream/${fileId}`;
-    player.style.display = 'block';
-    player.play();
-}
-
-function closeSheet() {
-    const player = document.getElementById('sheetVideoPlayer');
-    if (player) {
-        player.pause();
-        player.src = '';
+            ${filesHtml}
+        `;
     }
-    document.getElementById('sheetOverlay').classList.remove('active');
-    document.getElementById('bottomSheet').classList.remove('active');
+
+    modal.style.display = 'flex';
 }
 
-async function downloadFile(fileId, fileType, movieTitle, label) {
-    const chatId = tg?.initDataUnsafe?.user?.id;
-    if (!chatId) {
-        alert("Please open this app inside Telegram!");
+function closeModal() {
+    const modal = document.getElementById('movieModal');
+    if (modal) modal.style.display = 'none';
+}
+
+async function submitMovieRequest() {
+    const inputField = document.getElementById('requestInput');
+    const movieName = inputField ? inputField.value.trim() : '';
+
+    const user = tg?.initDataUnsafe?.user;
+
+    if (!user || !user.id) {
+        alert("⚠️ कृपया यह मिनी ऐप सीधे टेलीग्राम बॉट के अंदर से खोलें!");
         return;
     }
 
-    currentPendingFile = { fileId, fileType, movieTitle, label };
+    if (!movieName) {
+        alert("⚠️ कृपया मूवी का नाम दर्ज करें!");
+        return;
+    }
 
     try {
-        const res = await fetch(`${BACKEND_URL}/api/send-file`, {
+        const response = await fetch('/api/request', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ fileId, fileType, movieTitle, label, chatId })
+            body: JSON.stringify({
+                userId: user.id,
+                username: user.username || '',
+                firstName: user.first_name || '',
+                movieName: movieName
+            })
         });
 
-        const data = await res.json();
+        const data = await response.json();
 
-        if (res.status === 403 && data.forceSubRequired) {
-            closeSheet();
-            showJoinModal(data.channel, data.group);
-            return;
-        }
-
-        if (data.success && !data.short) {
-            closeSheet();
-            if (tg) tg.showPopup({ title: 'Success', message: 'File sent to your Telegram chat!' });
-        }
-    } catch (err) {
-        alert("Error sending file: " + err.message);
-    }
-}
-
-function showJoinModal(channel, group) {
-    const container = document.getElementById('joinLinksContainer');
-    container.innerHTML = '';
-    if (channel) container.innerHTML += `<a href="https://t.me/${channel.replace('@','')}" target="_blank" class="join-link-btn">📢 Join Channel</a>`;
-    if (group) container.innerHTML += `<a href="https://t.me/${group.replace('@','')}" target="_blank" class="join-link-btn" style="background:#ff0844">💬 Join Group</a>`;
-    document.getElementById('joinModal').classList.add('active');
-    document.getElementById('sheetOverlay').classList.add('active');
-}
-
-function retryDownload() {
-    document.getElementById('joinModal').classList.remove('active');
-    document.getElementById('sheetOverlay').classList.remove('active');
-    if (currentPendingFile) {
-        downloadFile(currentPendingFile.fileId, currentPendingFile.fileType, currentPendingFile.movieTitle, currentPendingFile.label);
-    }
-}
-
-document.getElementById('searchInput').addEventListener('input', renderFilteredMovies);
-
-function handleYearChange(year) {
-    selectedYear = year;
-    renderFilteredMovies();
-}
-
-function applyCategoryFilter(cat, el) {
-    document.querySelectorAll('.filter-chip').forEach(c => c.classList.remove('active'));
-    el.classList.add('active');
-    selectedCategory = cat;
-    renderFilteredMovies();
-}
-
-fetchMovies();
-async function sendMovieRequest(movieName) {
-    let name = movieName;
-    if (!name) {
-        name = prompt("मूवी का नाम लिखें:");
-    }
-    if (!name || name.trim() === '') return;
-
-    const tgUser = window.Telegram?.WebApp?.initDataUnsafe?.user || { first_name: 'Guest', username: 'none' };
-
-    try {
-        const res = await fetch('/api/request-movie', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ movieName: name.trim(), user: tgUser })
-        });
-        const data = await res.json();
-        if (data.success) {
-            alert(`✅ "${name}" की रिक्वेस्ट एडमिन को भेज दी गई है!`);
+        if (data.limitReached) {
+            const userChoice = confirm(
+                `⚠️ ${data.message}\n\nक्या आप अभी अपना इनवाइट लिंक दोस्तों के साथ शेयर करना चाहते हैं?`
+            );
+            if (userChoice) {
+                const shareUrl = `https://t.me/share/url?url=${encodeURIComponent(data.inviteLink)}&text=${encodeURIComponent('Join Movie Zone for latest movies and series!')}`;
+                if (tg && tg.openTelegramLink) {
+                    tg.openTelegramLink(shareUrl);
+                } else {
+                    window.open(shareUrl, '_blank');
+                }
+            }
+        } else if (data.success) {
+            alert(data.message);
+            if (inputField) inputField.value = '';
         } else {
-            alert("❌ रिक्वेस्ट भेजने में समस्या आई।");
+            alert(data.message || "अनुरोध भेजने में विफल!");
         }
-    } catch (err) {
-        alert("❌ एरर: " + err.message);
+    } catch (e) {
+        alert("सर्वर से कनेक्ट करने में समस्या आई!");
     }
 }
 
+document.addEventListener('DOMContentLoaded', () => {
+    initApp();
+
+    const searchInput = document.getElementById('searchInput');
+    if (searchInput) {
+        searchInput.addEventListener('input', (e) => {
+            currentSearch = e.target.value.trim();
+            loadMovies();
+        });
+    }
+
+    const catButtons = document.querySelectorAll('.cat-btn');
+    catButtons.forEach(btn => {
+        btn.addEventListener('click', (e) => {
+            catButtons.forEach(b => b.classList.remove('active'));
+            e.target.classList.add('active');
+            currentCategory = e.target.getAttribute('data-cat') || 'All';
+            loadMovies();
+        });
+    });
+});
