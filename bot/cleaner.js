@@ -5,29 +5,22 @@ function parseMediaInfo(rawText) {
         return { cleanTitle: '', label: 'Standard Quality', isSeries: false, isDubbed: false, detectedYear: null };
     }
 
-    let text = rawText.split('\n')[0].replace(/\.(mp4|mkv|avi|mov|zip|rar)/gi, '');
+    let text = rawText.split('\n')[0].replace(/\.(mp4|mkv|avi|mov|zip|rar|\d{3})/gi, '');
 
     let yearMatch = text.match(/\b(19\d\d|20\d\d)\b/);
     let detectedYear = yearMatch ? yearMatch[0] : null;
 
-    let isSeries = /(s\d+|season|episode|ep\s*\d+|e\s*\d+|part\s*\d+|all\s*part|complete\s*series|series|web\s*series)/i.test(text);
+    // सिर्फ असली वेब सीरीज़ के लिए (PART 01 को सीरीज नहीं मानेंगे)
+    let isSeries = /(s\d+\s*e\d+|season\s*\d+|episode\s*\d+|ep\s*\d+|complete\s*series|web\s*series)/i.test(text);
     let isDubbed = /(hindi|dubbed|dual\s*audio)/i.test(text);
 
-    let epMatch = text.match(/(s\d+\s*e\d+|season\s*\d+\s*ep\s*\d+|season\s*\d+|ep\s*\d+|episode\s*\d+|e\s*\d+|part\s*\d+|s\d+)/i);
+    let epMatch = text.match(/(s\d+\s*e\d+|season\s*\d+\s*ep\s*\d+|season\s*\d+|ep\s*\d+|episode\s*\d+|part\s*\d+|part\d+)/i);
     let episode = epMatch ? epMatch[0].toUpperCase() : '';
-
-    if (!episode) {
-        let trailingNumMatch = text.match(/(?:^|\s)(?:ep|e|part)?\s*([0-9]{1,2})\s*$/i);
-        if (trailingNumMatch) {
-            episode = `EP ${trailingNumMatch[1]}`;
-            isSeries = true;
-        }
-    }
 
     let qualityMatch = text.match(/(2160p|4k|1080p|720p|480p|fhd|uhd|hd|sd)/i);
     let quality = qualityMatch ? qualityMatch[0].toUpperCase() : '';
 
-    let codecMatch = text.match(/(hevc|x265|h[\s\._-]*265|x264|h[\s\._-]*264|10bit|hdr|ddp[\s\._-]*5[\s\._-]*1|5[\s\._-]*1|2[\s\._-]*0|ds4k|ds)/i);
+    let codecMatch = text.match(/(hevc|x265|h[\s\._-]*265|x264|h[\s\._-]*264|10bit|hdr|ddp[\s\._-]*5[\s\._-]*1|5[\s\._-]*1|2[\s\._-]*0|ds4k|ds|hq|v\d+)/i);
     let codecInfo = codecMatch ? codecMatch[0].replace(/[\s\._-]+/g, '').toUpperCase() : '';
 
     let labelParts = [];
@@ -41,9 +34,11 @@ function parseMediaInfo(rawText) {
         .replace(/\(.*?\)/g, ' ')
         .replace(/[\._\-]/g, ' ')
         .replace(/(https?:\/\/[^\s]+|t\.me\/[^\s]+|www\.[^\s]+|@\w+)/gi, ' ')
+        .replace(/\b(sample|preview|trailer)\b/gi, ' ')
         .replace(/\b(480p|720p|1080p|2160p|4k|fhd|uhd|hd|sd|webdl|web-dl|web\s*dl|webrip|bluray|hdrip|dvdrip|predvd|hdtc|esub|subs?|subtitles?)\b/gi, ' ')
-        .replace(/\b(x264|x265|hevc|h264|h265|avc|10bit|hdr|dv|aac20|aac|amzn|ddp51|ddp20|ddp|dd|hindi|english|telugu|tamil|punjabi|korean|dubbed|multi|dual\s*audio|org|original|full|mkv|nf|uplay|paramount|official|cinema|south\s*movie|south|movie|complete\s*web\s*series|complete\s*series|web\s*series|series|combined|all\s*part|part\s*\d+|ds4k|ds|primex|prime|hotstar|zee5|sonyliv|jiocinema|clipmatezone|bulmoviee|bulmovie)\b/gi, ' ')
-        .replace(/\b(s\d+\s*e\d+|season\s*\d+|ep\s*\d+|episode\s*\d+|part\s*\d+|s\d+|e\d+)\b/gi, ' ')
+        .replace(/\b(x264|x265|hevc|h264|h265|avc|10bit|hdr|dv|aac20|aac|amzn|ddp51|ddp20|ddp|dd|hindi|english|telugu|tamil|punjabi|korean|dubbed|multi|dual\s*audio|org|original|full|mkv|nf|uplay|paramount|official|cinema|south\s*movie|south|movie|complete\s*web\s*series|complete\s*series|web\s*series|series|combined|all\s*part|ds4k|ds|primex|prime|hotstar|zee5|sonyliv|jiocinema|clipmatezone|bulmoviee|bulmovie)\b/gi, ' ')
+        .replace(/\b(hq|v[0-9]|v\d+|hind|hin|eng|tam|tel|part\s*\d+|part\d+)\b/gi, ' ')
+        .replace(/\b(s\d+\s*e\d+|season\s*\d+|ep\s*\d+|episode\s*\d+|s\d+|e\d+)\b/gi, ' ')
         .replace(/\b(19\d\d|20\d\d)\b/g, ' ')
         .replace(/\b(20|51|71)\b/g, ' ')
         .replace(/\b265\b|\b264\b/gi, ' ')
@@ -102,8 +97,6 @@ async function fetchTMDBData(title, year = null, isSeries = false) {
             if (!matched) matched = res.data.results[0];
 
             const releaseYear = (matched.release_date || matched.first_air_date || '').split('-')[0];
-            if (!year && releaseYear && parseInt(releaseYear) < 1980) return null;
-
             const officialTitle = matched.title || matched.name || title;
             const posterPath = matched.poster_path ? `https://image.tmdb.org/t/p/w500${matched.poster_path}` : null;
             const lang = (matched.original_language || '').toLowerCase();
