@@ -4,7 +4,6 @@ const { Movie, User } = require('../models');
 module.exports = function createApiRoutes(bot) {
     const router = express.Router();
 
-    // 1. मूवी लिस्ट API
     router.get('/movies', async (req, res) => {
         try {
             const { search, category, page = 1, limit = 20 } = req.query;
@@ -34,7 +33,6 @@ module.exports = function createApiRoutes(bot) {
         }
     });
 
-    // 2. बॉट यूज़रनेम API
     router.get('/bot-info', async (req, res) => {
         try {
             const botInfo = await bot.getMe();
@@ -44,7 +42,26 @@ module.exports = function createApiRoutes(bot) {
         }
     });
 
-    // 3. मूवी रिक्वेस्ट API (1 डेली लिमिट + रेफरल चेक)
+    // ⚡ डायरेक्ट फ़ाइल डिलीवरी API
+    router.post('/send-file', async (req, res) => {
+        try {
+            const { userId, fileId } = req.body;
+            if (!userId || !fileId) {
+                return res.status(400).json({ success: false, message: "Missing userId or fileId" });
+            }
+
+            await bot.sendDocument(userId, fileId, {
+                caption: "🎬 <b>आपकी फ़ाइल तैयार है!</b>\n\n⚠️ <i>कृपया इसे तुरंत Saved Messages में फॉरवर्ड कर लें।</i>",
+                parse_mode: 'HTML'
+            });
+
+            res.json({ success: true, message: "फ़ाइल आपके बॉट चैट में भेज दी गई है!" });
+        } catch (err) {
+            console.error('Send File API Error:', err.message);
+            res.status(500).json({ success: false, message: "फ़ाइल भेजने में समस्या आई: " + err.message });
+        }
+    });
+
     router.post('/request', async (req, res) => {
         try {
             const { userId, movieName, username, firstName } = req.body;
