@@ -15,7 +15,9 @@ async function initApp() {
     try {
         const res = await fetch('/api/bot-info');
         const data = await res.json();
-        botUsername = data.username || '';
+        if (data && data.username) {
+            botUsername = data.username;
+        }
     } catch (e) {
         console.error('Failed to get bot info:', e);
     }
@@ -81,16 +83,33 @@ async function loadMovies() {
             grid.appendChild(card);
         });
     } catch (err) {
+        console.error('Error loading movies:', err);
         grid.innerHTML = '<div style="color:#ef4444;grid-column:1/-1;text-align:center;padding:20px;">डेटा लोड करने में एरर आया!</div>';
     }
 }
 
-function downloadFile(fileId) {
-    const url = `https://t.me/${botUsername}?start=file_${fileId}`;
-    if (tg && tg.openTelegramLink) {
-        tg.openTelegramLink(url);
+async function triggerDownload(fileId) {
+    if (!botUsername) {
+        try {
+            const res = await fetch('/api/bot-info');
+            const data = await res.json();
+            botUsername = data.username;
+        } catch (e) {}
+    }
+
+    const targetUrl = `https://t.me/${botUsername}?start=file_${fileId}`;
+
+    if (window.Telegram?.WebApp) {
+        if (window.Telegram.WebApp.openTelegramLink) {
+            window.Telegram.WebApp.openTelegramLink(targetUrl);
+        } else {
+            window.location.href = targetUrl;
+        }
+        setTimeout(() => {
+            window.Telegram.WebApp.close();
+        }, 300);
     } else {
-        window.location.href = url;
+        window.location.href = targetUrl;
     }
 }
 
@@ -144,7 +163,7 @@ function openDownloadModal(movie) {
                 episodesHtml += `
                     <div class="episode-item" style="display:flex;justify-content:space-between;align-items:center;background:#0f172a;border:1px solid #334155;padding:10px 12px;border-radius:8px;">
                         <span class="episode-name" style="font-size:12px;font-weight:500;color:#e2e8f0;">${f.label}</span>
-                        <button onclick="downloadFile('${f.fileId}')" class="episode-dl-btn" style="background:#2563eb;color:#fff;border:none;padding:6px 12px;border-radius:6px;font-size:12px;font-weight:600;cursor:pointer;">Get File</button>
+                        <button onclick="triggerDownload('${f.fileId}')" class="episode-dl-btn" style="background:#2563eb;color:#fff;border:none;padding:6px 12px;border-radius:6px;font-size:12px;font-weight:600;cursor:pointer;">Get File</button>
                     </div>
                 `;
             });
@@ -174,7 +193,7 @@ function openDownloadModal(movie) {
             filesHtml += `
                 <div class="episode-item" style="display:flex;justify-content:space-between;align-items:center;background:#0f172a;border:1px solid #334155;padding:10px 12px;border-radius:8px;">
                     <span class="episode-name" style="font-size:12px;font-weight:500;color:#e2e8f0;">${f.label}</span>
-                    <button onclick="downloadFile('${f.fileId}')" class="episode-dl-btn" style="background:#2563eb;color:#fff;border:none;padding:6px 12px;border-radius:6px;font-size:12px;font-weight:600;cursor:pointer;">Get File</button>
+                    <button onclick="triggerDownload('${f.fileId}')" class="episode-dl-btn" style="background:#2563eb;color:#fff;border:none;padding:6px 12px;border-radius:6px;font-size:12px;font-weight:600;cursor:pointer;">Get File</button>
                 </div>
             `;
         });
