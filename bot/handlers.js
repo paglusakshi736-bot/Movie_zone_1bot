@@ -5,8 +5,17 @@ const ADMIN_ID = process.env.ADMIN_ID;
 const adminDeleteSessions = {};
 const PAGE_LIMIT = 8;
 let uploadQueue = Promise.resolve();
-const pendingUploads = {}; // बिना नाम वाली फाइल्स के लिए सेशन
+const adminFileQueue = {}; // मल्टीपल फाइल्स की कतार
 
+async function processNextPendingFile(bot, chatId) {
+    if (!adminFileQueue[chatId] || adminFileQueue[chatId].length === 0) return;
+    const current = adminFileQueue[chatId][0];
+    await bot.sendMessage(
+        chatId,
+        `⚠️ <b>फ़ाइल (${current.fileSize || 'Unknown Size'}) का नाम नहीं मिला!</b>\n(कतार में शेष फ़ाइलें: ${adminFileQueue[chatId].length})\n\nकृपया इस मूवी/सीरीज़ का नाम लिखकर भेजें:`,
+        { parse_mode: 'HTML' }
+    );
+}
 
 function isAdmin(userId) {
     if (!userId) return false;
@@ -115,6 +124,7 @@ module.exports = function setupBotHandlers(bot) {
             bot.sendMessage(msg.chat.id, `📊 <b>लाइव स्टेटिस्टिक्स</b>\n\n👥 <b>कुल यूज़र्स:</b> ${totalUsers}\n🎬 <b>कुल मूवी कार्ड्स:</b> ${totalMovies}\n📂 <b>कुल फाइल्स:</b> ${totalFiles}`, { parse_mode: 'HTML' });
         } catch (e) { bot.sendMessage(msg.chat.id, "❌ एरर: " + e.message); }
     });
+
     bot.onText(/\/cleardb/, async (msg) => {
         if (!isAdmin(msg.from.id)) return;
         try {
@@ -124,8 +134,7 @@ module.exports = function setupBotHandlers(bot) {
             bot.sendMessage(msg.chat.id, "❌ एरर: " + e.message); 
         }
     });
-    
-        // 📩 Telegram Bot /request कमांड (सभी एडमिन्स को भेजने के लिए)
+
     bot.onText(/\/request(?:\s+(.+))?/, async (msg, match) => {
         const reqMovie = match[1] ? match[1].trim() : '';
         if (!reqMovie) {
@@ -134,13 +143,11 @@ module.exports = function setupBotHandlers(bot) {
 
         const user = msg.from;
         const adminIds = ADMIN_ID ? ADMIN_ID.split(',').map(id => id.trim()) : [];
-
         const requestText = `📩 <b>नई मूवी रिक्वेस्ट (Bot Command)!</b>\n\n🎬 <b>मूवी:</b> ${reqMovie}\n👤 <b>यूज़र:</b> ${user.first_name || 'User'} (@${user.username || 'N/A'})\n🆔 <b>ID:</b> <code>${user.id}</code>`;
 
         for (const id of adminIds) {
             await bot.sendMessage(id, requestText, { parse_mode: 'HTML' }).catch(() => {});
         }
-
         bot.sendMessage(msg.chat.id, `✅ आपकी रिक्वेस्ट <b>"${reqMovie}"</b> एडमिन को भेज दी गई है! जल्द ही अपलोड कर दी जाएगी।`, { parse_mode: 'HTML' });
     });
 
@@ -215,7 +222,7 @@ module.exports = function setupBotHandlers(bot) {
         }
     });
 
-        bot.onText(/\/rename (.+)/, async (msg, match) => {
+    bot.onText(/\/rename (.+)/, async (msg, match) => {
         if (!isAdmin(msg.from.id)) return;
         const parts = match[1].split('=');
         if (parts.length !== 2) return bot.sendMessage(msg.chat.id, "⚠️ तरीका: <code>/rename Purana = Naya</code>", { parse_mode: 'HTML' });
@@ -224,7 +231,6 @@ module.exports = function setupBotHandlers(bot) {
         const newTitle = parts[1].trim();
 
         try {
-            // नए नाम से TMDB का ओरिजिनल डेटा खोजना
             const tmdbData = await fetchTMDBData(newTitle);
             const finalTitle = tmdbData?.officialTitle || newTitle;
             const poster = tmdbData?.poster || null;
@@ -249,7 +255,6 @@ module.exports = function setupBotHandlers(bot) {
             bot.sendMessage(msg.chat.id, "❌ एरर: " + e.message); 
         }
     });
-    
 
     bot.on('photo', async (msg) => {
         if (!isAdmin(msg.from.id)) return;
@@ -316,8 +321,7 @@ module.exports = function setupBotHandlers(bot) {
         } catch (e) { bot.sendMessage(msg.chat.id, "❌ एरर: " + e.message); }
     });
 
-
-        // मूवी सेव करने का कॉमन फंक्शन
+    // कॉमन सेव फंक्शन
     async function saveMovieToDB(bot, chatId, titleToUse, fileData) {
         const { fileId, fileType, fileSize, thumbFileId, label, isSeries, isDubbed, detectedYear } = fileData;
         try {
@@ -380,17 +384,22 @@ module.exports = function setupBotHandlers(bot) {
         }
     }
 
-    // फ़ाइल अपलोड और टेक्स्ट रिप्लाई हैंडलर
-    bot.on('message', (msg) => {
+    // फ़ाइल अपलोड और बैच हैंडलर
+    bot.on('message', async (msg) => {
         const userId = msg.from ? msg.from.id.toString() : '';
         if (!isAdmin(userId)) return;
 
-        // 1. अगर एडमिन ने बिना नाम वाली फाइल का नाम लिखकर भेजा
-        if (msg.text && !msg.text.startsWith('/') && pendingUploads[msg.chat.id]) {
-            const pendingFile = pendingUploads[msg.chat.id];
-            delete pendingUploads[msg.chat.id];
+        // एडमिन ने नाम का रिप्लाई दिया
+        if (msg.text && !msg.text.startsWith('/') && adminFileQueue[msg.chat.id] && adminFileQueue[msg.chat.id].length > 0) {
+            const fileData = adminFileQueue[msg.chat.id].shift();
             const enteredTitle = msg.text.trim();
-            uploadQueue = uploadQueue.then(() => saveMovieToDB(bot, msg.chat.id, enteredTitle, pendingFile));
+            
+            uploadQueue = uploadQueue.then(async () => {
+                await saveMovieToDB(bot, msg.chat.id, enteredTitle, fileData);
+                if (adminFileQueue[msg.chat.id] && adminFileQueue[msg.chat.id].length > 0) {
+                    await processNextPendingFile(bot, msg.chat.id);
+                }
+            });
             return;
         }
 
@@ -401,10 +410,22 @@ module.exports = function setupBotHandlers(bot) {
         if (!file) return;
 
         uploadQueue = uploadQueue.then(async () => {
-            // फ़ाइल के कैप्शन, document file_name या video file_name को जांचना
-            let rawInput = msg.caption || file.file_name || (msg.video ? msg.video.file_name : '') || '';
-            const { cleanTitle, label, isSeries, isDubbed, detectedYear } = parseMediaInfo(rawInput);
+            let rawInput = msg.caption || file.file_name || '';
 
+            // अगर नाम न मिले तो टेलीग्राम सर्वर पाथ से फ़ाइल नाम ढूंढना
+            if (!rawInput && file.file_id) {
+                try {
+                    const fileInfo = await bot.getFile(file.file_id);
+                    if (fileInfo && fileInfo.file_path) {
+                        const extracted = fileInfo.file_path.split('/').pop().replace(/\.[^/.]+$/, "");
+                        if (!extracted.startsWith('file_')) {
+                            rawInput = extracted;
+                        }
+                    }
+                } catch (e) {}
+            }
+
+            const { cleanTitle, label, isSeries, isDubbed, detectedYear } = parseMediaInfo(rawInput);
             const fileId = file.file_id;
             const fileType = msg.video ? 'video' : 'document';
             const fileSize = formatBytes(file.file_size);
@@ -412,19 +433,17 @@ module.exports = function setupBotHandlers(bot) {
 
             const fileData = { fileId, fileType, fileSize, thumbFileId, label, isSeries, isDubbed, detectedYear };
 
-            // अगर कैप्शन और अंदरूनी नाम दोनों में कुछ नहीं मिला तो एडमिन से पूछें
             if (!cleanTitle) {
-                pendingUploads[msg.chat.id] = fileData;
-                return bot.sendMessage(
-                    msg.chat.id,
-                    `⚠️ <b>इस फ़ाइल (${fileSize || 'Unknown Size'}) का नाम नहीं मिला!</b>\n\nकृपया इस मूवी/सीरीज़ का नाम रिप्लाई में लिखकर भेजें:`,
-                    { parse_mode: 'HTML' }
-                );
+                if (!adminFileQueue[msg.chat.id]) adminFileQueue[msg.chat.id] = [];
+                adminFileQueue[msg.chat.id].push(fileData);
+                
+                if (adminFileQueue[msg.chat.id].length === 1) {
+                    await processNextPendingFile(bot, msg.chat.id);
+                }
+                return;
             }
 
-            // अगर नाम मिल गया, तो सीधे TMDB और DB में सेव करें
             await saveMovieToDB(bot, msg.chat.id, cleanTitle, fileData);
         });
     });
 };
-                                                             
