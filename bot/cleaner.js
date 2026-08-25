@@ -7,7 +7,6 @@ function parseMediaInfo(rawText) {
 
     let text = rawText.split('\n')[0].replace(/\.(mp4|mkv|avi|mov|zip|rar)/gi, '');
 
-    // साल निकालना (1900-2099)
     let yearMatch = text.match(/\b(19\d\d|20\d\d)\b/);
     let detectedYear = yearMatch ? yearMatch[0] : null;
 
@@ -34,11 +33,11 @@ function parseMediaInfo(rawText) {
         .replace(/\(.*?\)/g, ' ')
         .replace(/[\._\-]/g, ' ')
         .replace(/(https?:\/\/[^\s]+|t\.me\/[^\s]+|www\.[^\s]+|@\w+)/gi, ' ')
-        .replace(/(480p|720p|1080p|2160p|4k|webdl|web-dl|web\s*dl|webrip|bluray|hdrip|dvdrip|predvd|hdtc|esub|subs?|subtitles?)/gi, ' ')
-        .replace(/(x264|x265|hevc|h[\s\._-]*264|h[\s\._-]*265|avc|10bit|hdr|dv|aac2[\s\._-]*0|aac|amzn|ddp5[\s\._-]*1|ddp2[\s\._-]*0|ddp|dd\+|hindi|english|telugu|tamil|korean|dubbed|multi|dual\s*audio|org|original|hq|hd|full|mkv|nf|uplay|paramount|official|cinema|south\s*movie|south|movie|complete\s*web\s*series|complete\s*series|web\s*series|series|combined|all\s*part|part\s*\d+|ds)/gi, ' ')
+        .replace(/\b(480p|720p|1080p|2160p|4k|webdl|web-dl|web\s*dl|webrip|bluray|hdrip|dvdrip|predvd|hdtc|esub|subs?|subtitles?)\b/gi, ' ')
+        .replace(/\b(x264|x265|hevc|h264|h265|avc|10bit|hdr|dv|aac20|aac|amzn|ddp51|ddp20|ddp|dd|hindi|english|telugu|tamil|punjabi|korean|dubbed|multi|dual\s*audio|org|original|full|mkv|nf|uplay|paramount|official|cinema|south\s*movie|south|movie|complete\s*web\s*series|complete\s*series|web\s*series|series|combined|all\s*part|part\s*\d+|ds|primex|prime|hotstar|zee5|sonyliv|jiocinema)\b/gi, ' ')
         .replace(/\b(s\d+|season\s*\d+|ep\s*\d+|episode\s*\d+)\b/gi, ' ')
         .replace(/\b(19\d\d|20\d\d)\b/g, ' ')
-        .replace(/\b(2[\s\._-]*0|5[\s\._-]*1|7[\s\._-]*1)\b/gi, ' ')
+        .replace(/\b(20|51|71)\b/g, ' ')
         .replace(/\b265\b|\b264\b/gi, ' ')
         .replace(/\b[a-zA-Z0-9]{8,}\b/g, ' ')
         .replace(/[^\w\s]/gi, ' ')
