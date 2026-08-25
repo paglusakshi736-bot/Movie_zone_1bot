@@ -83,33 +83,54 @@ async function loadMovies() {
             grid.appendChild(card);
         });
     } catch (err) {
-        console.error('Error loading movies:', err);
         grid.innerHTML = '<div style="color:#ef4444;grid-column:1/-1;text-align:center;padding:20px;">डेटा लोड करने में एरर आया!</div>';
     }
 }
 
-async function triggerDownload(fileId) {
-    if (!botUsername) {
-        try {
-            const res = await fetch('/api/bot-info');
-            const data = await res.json();
-            botUsername = data.username;
-        } catch (e) {}
+async function triggerDownload(fileId, btnElement) {
+    const user = tg?.initDataUnsafe?.user;
+
+    if (!user || !user.id) {
+        const targetUrl = `https://t.me/${botUsername}?start=file_${fileId}`;
+        if (tg && tg.openTelegramLink) tg.openTelegramLink(targetUrl);
+        else window.location.href = targetUrl;
+        return;
     }
 
-    const targetUrl = `https://t.me/${botUsername}?start=file_${fileId}`;
+    if (btnElement) {
+        btnElement.innerText = "भेजा जा रहा है...";
+        btnElement.disabled = true;
+    }
 
-    if (window.Telegram?.WebApp) {
-        if (window.Telegram.WebApp.openTelegramLink) {
-            window.Telegram.WebApp.openTelegramLink(targetUrl);
+    try {
+        const res = await fetch('/api/send-file', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+                userId: user.id,
+                fileId: fileId
+            })
+        });
+
+        const result = await res.json();
+        if (result.success) {
+            if (btnElement) btnElement.innerText = "✅ Sent to Bot!";
+            if (tg && tg.close) {
+                setTimeout(() => tg.close(), 600);
+            }
         } else {
-            window.location.href = targetUrl;
+            alert(result.message || "समस्या आई!");
+            if (btnElement) {
+                btnElement.innerText = "Get File";
+                btnElement.disabled = false;
+            }
         }
-        setTimeout(() => {
-            window.Telegram.WebApp.close();
-        }, 300);
-    } else {
-        window.location.href = targetUrl;
+    } catch (e) {
+        alert("फ़ाइल भेजने में समस्या आई!");
+        if (btnElement) {
+            btnElement.innerText = "Get File";
+            btnElement.disabled = false;
+        }
     }
 }
 
@@ -163,7 +184,7 @@ function openDownloadModal(movie) {
                 episodesHtml += `
                     <div class="episode-item" style="display:flex;justify-content:space-between;align-items:center;background:#0f172a;border:1px solid #334155;padding:10px 12px;border-radius:8px;">
                         <span class="episode-name" style="font-size:12px;font-weight:500;color:#e2e8f0;">${f.label}</span>
-                        <button onclick="triggerDownload('${f.fileId}')" class="episode-dl-btn" style="background:#2563eb;color:#fff;border:none;padding:6px 12px;border-radius:6px;font-size:12px;font-weight:600;cursor:pointer;">Get File</button>
+                        <button onclick="triggerDownload('${f.fileId}', this)" class="episode-dl-btn" style="background:#2563eb;color:#fff;border:none;padding:6px 12px;border-radius:6px;font-size:12px;font-weight:600;cursor:pointer;">Get File</button>
                     </div>
                 `;
             });
@@ -193,7 +214,7 @@ function openDownloadModal(movie) {
             filesHtml += `
                 <div class="episode-item" style="display:flex;justify-content:space-between;align-items:center;background:#0f172a;border:1px solid #334155;padding:10px 12px;border-radius:8px;">
                     <span class="episode-name" style="font-size:12px;font-weight:500;color:#e2e8f0;">${f.label}</span>
-                    <button onclick="triggerDownload('${f.fileId}')" class="episode-dl-btn" style="background:#2563eb;color:#fff;border:none;padding:6px 12px;border-radius:6px;font-size:12px;font-weight:600;cursor:pointer;">Get File</button>
+                    <button onclick="triggerDownload('${f.fileId}', this)" class="episode-dl-btn" style="background:#2563eb;color:#fff;border:none;padding:6px 12px;border-radius:6px;font-size:12px;font-weight:600;cursor:pointer;">Get File</button>
                 </div>
             `;
         });
