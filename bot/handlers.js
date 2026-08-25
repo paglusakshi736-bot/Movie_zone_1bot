@@ -5,6 +5,8 @@ const ADMIN_ID = process.env.ADMIN_ID;
 const adminDeleteSessions = {};
 const PAGE_LIMIT = 8;
 let uploadQueue = Promise.resolve();
+const pendingUploads = {}; // बिना नाम वाली फाइल्स के लिए सेशन
+
 
 function isAdmin(userId) {
     if (!userId) return false;
@@ -294,19 +296,93 @@ module.exports = function setupBotHandlers(bot) {
         } catch (e) { bot.sendMessage(msg.chat.id, "❌ एरर: " + e.message); }
     });
 
-    // फ़ाइल अपलोड हैंडलर
-    bot.on('message', (msg) => {
-        if (msg.text && msg.text.startsWith('/')) return;
-        if (msg.photo && msg.caption && msg.caption.startsWith('/setposter')) return;
 
+        // मूवी सेव करने का कॉमन फंक्शन
+    async function saveMovieToDB(bot, chatId, titleToUse, fileData) {
+        const { fileId, fileType, fileSize, thumbFileId, label, isSeries, isDubbed, detectedYear } = fileData;
+        try {
+            const tmdbData = await fetchTMDBData(titleToUse, detectedYear, isSeries);
+            const finalMovieTitle = tmdbData?.officialTitle || titleToUse;
+            const poster = tmdbData?.poster || null;
+            const rating = tmdbData?.rating || '8.0';
+            const year = tmdbData?.year || detectedYear || '2026';
+
+            let finalCategory = tmdbData?.category || (isSeries ? 'Web Series' : 'Movie');
+            if (!isSeries && isDubbed && finalCategory !== 'Hindi') {
+                finalCategory = 'Hindi';
+            }
+
+            let movie = await Movie.findOne({ 
+                $or: [
+                    { title: new RegExp(`^${titleToUse}$`, 'i') },
+                    { title: new RegExp(`^${finalMovieTitle}$`, 'i') }
+                ]
+            });
+
+            let finalLabel = label;
+            if (fileSize) finalLabel += ` (${fileSize})`;
+
+            if (movie) {
+                const countSameLabel = movie.files.filter(f => f.label.startsWith(label)).length;
+                if (countSameLabel > 0) finalLabel += ` [Option ${countSameLabel + 1}]`;
+
+                movie.files.push({ label: finalLabel, fileId, fileType, fileSize });
+                if (thumbFileId && !movie.thumbFileId) movie.thumbFileId = thumbFileId;
+                if (poster && (!movie.poster || movie.poster.includes('placehold.co'))) movie.poster = poster;
+                movie.updatedAt = new Date();
+                await movie.save();
+
+                await bot.sendMessage(
+                    chatId,
+                    `✅ <b>मौजूदा कार्ड में नया वर्ज़न जोड़ा गया!</b>\n\n🎬 <b>मूवी:</b> ${movie.title}\n📦 <b>क्वालिटी:</b> ${finalLabel}\n📂 <b>कुल फाइल्स:</b> ${movie.files.length}`,
+                    { parse_mode: 'HTML' }
+                );
+            } else {
+                movie = new Movie({
+                    title: finalMovieTitle,
+                    poster: poster,
+                    rating,
+                    year,
+                    category: finalCategory,
+                    thumbFileId,
+                    files: [{ label: finalLabel, fileId, fileType, fileSize }]
+                });
+                await movie.save();
+
+                await bot.sendMessage(
+                    chatId,
+                    `✅ <b>नया कार्ड बना!</b>\n\n🎬 <b>मूवी:</b> ${finalMovieTitle}\n🏷️ <b>कैटेगरी:</b> ${finalCategory}\n📦 <b>क्वालिटी:</b> ${finalLabel}\n⭐ <b>रेटिंग:</b> ${rating}\n📅 <b>साल:</b> ${year}`,
+                    { parse_mode: 'HTML' }
+                );
+            }
+        } catch (err) {
+            await bot.sendMessage(chatId, "❌ एरर: " + err.message);
+        }
+    }
+
+    // फ़ाइल अपलोड और टेक्स्ट रिप्लाई हैंडलर
+    bot.on('message', (msg) => {
         const userId = msg.from ? msg.from.id.toString() : '';
         if (!isAdmin(userId)) return;
+
+        // 1. अगर एडमिन ने बिना नाम वाली फाइल का नाम लिखकर भेजा
+        if (msg.text && !msg.text.startsWith('/') && pendingUploads[msg.chat.id]) {
+            const pendingFile = pendingUploads[msg.chat.id];
+            delete pendingUploads[msg.chat.id];
+            const enteredTitle = msg.text.trim();
+            uploadQueue = uploadQueue.then(() => saveMovieToDB(bot, msg.chat.id, enteredTitle, pendingFile));
+            return;
+        }
+
+        if (msg.text && msg.text.startsWith('/')) return;
+        if (msg.photo && msg.caption && msg.caption.startsWith('/setposter')) return;
 
         const file = msg.video || msg.document;
         if (!file) return;
 
         uploadQueue = uploadQueue.then(async () => {
-            let rawInput = msg.caption || file.file_name || '';
+            // फ़ाइल के कैप्शन, document file_name या video file_name को जांचना
+            let rawInput = msg.caption || file.file_name || (msg.video ? msg.video.file_name : '') || '';
             const { cleanTitle, label, isSeries, isDubbed, detectedYear } = parseMediaInfo(rawInput);
 
             const fileId = file.file_id;
@@ -314,68 +390,21 @@ module.exports = function setupBotHandlers(bot) {
             const fileSize = formatBytes(file.file_size);
             let thumbFileId = file.thumbnail ? file.thumbnail.file_id : null;
 
-            try {
-                const tmdbData = await fetchTMDBData(cleanTitle,detectedYear,isSeries);
-                const finalMovieTitle = tmdbData?.officialTitle || cleanTitle;
-                
-                // TMDB से पोस्टर न मिलने पर null रखेंगे ताकि फ़ाइल का Telegram Thumbnail काम करे
-                const poster = tmdbData?.poster || null;
-                const rating = tmdbData?.rating || '8.0';
-                const year = tmdbData?.year || detectedYear;
+            const fileData = { fileId, fileType, fileSize, thumbFileId, label, isSeries, isDubbed, detectedYear };
 
-                let finalCategory = tmdbData?.category || 'Movie';
-                if (isSeries) {
-                    finalCategory = 'Web Series';
-                } else if (isDubbed && finalCategory !== 'Hindi') {
-                    finalCategory = 'Hindi';
-                }
-
-                let movie = await Movie.findOne({ 
-                    $or: [
-                        { title: new RegExp(`^${cleanTitle}$`, 'i') },
-                        { title: new RegExp(`^${finalMovieTitle}$`, 'i') }
-                    ]
-                });
-
-                let finalLabel = label;
-                if (fileSize) finalLabel += ` (${fileSize})`;
-
-                if (movie) {
-                    const countSameLabel = movie.files.filter(f => f.label.startsWith(label)).length;
-                    if (countSameLabel > 0) finalLabel += ` [Option ${countSameLabel + 1}]`;
-
-                    movie.files.push({ label: finalLabel, fileId, fileType, fileSize });
-                    if (thumbFileId && !movie.thumbFileId) movie.thumbFileId = thumbFileId;
-                    if (poster && (!movie.poster || movie.poster.includes('placehold.co'))) movie.poster = poster;
-                    movie.updatedAt = new Date();
-                    await movie.save();
-
-                    await bot.sendMessage(
-                        msg.chat.id,
-                        `✅ <b>मौजूदा कार्ड में नया वर्ज़न जोड़ा गया!</b>\n\n🎬 <b>मूवी:</b> ${movie.title}\n📦 <b>क्वालिटी:</b> ${finalLabel}\n📂 <b>कुल फाइल्स:</b> ${movie.files.length}`,
-                        { parse_mode: 'HTML' }
-                    );
-                } else {
-                    movie = new Movie({
-                        title: finalMovieTitle,
-                        poster: poster,
-                        rating,
-                        year,
-                        category: finalCategory,
-                        thumbFileId,
-                        files: [{ label: finalLabel, fileId, fileType, fileSize }]
-                    });
-                    await movie.save();
-
-                    await bot.sendMessage(
-                        msg.chat.id,
-                        `✅ <b>नया कार्ड बना!</b>\n\n🎬 <b>मूवी:</b> ${finalMovieTitle}\n🏷️ <b>कैटेगरी:</b> ${finalCategory}\n📦 <b>क्वालिटी:</b> ${finalLabel}\n⭐ <b>रेटिंग:</b> ${rating}\n📅 <b>साल:</b> ${year}`,
-                        { parse_mode: 'HTML' }
-                    );
-                }
-            } catch (err) {
-                await bot.sendMessage(msg.chat.id, "❌ एरर: " + err.message);
+            // अगर कैप्शन और अंदरूनी नाम दोनों में कुछ नहीं मिला तो एडमिन से पूछें
+            if (!cleanTitle) {
+                pendingUploads[msg.chat.id] = fileData;
+                return bot.sendMessage(
+                    msg.chat.id,
+                    `⚠️ <b>इस फ़ाइल (${fileSize || 'Unknown Size'}) का नाम नहीं मिला!</b>\n\nकृपया इस मूवी/सीरीज़ का नाम रिप्लाई में लिखकर भेजें:`,
+                    { parse_mode: 'HTML' }
+                );
             }
+
+            // अगर नाम मिल गया, तो सीधे TMDB और DB में सेव करें
+            await saveMovieToDB(bot, msg.chat.id, cleanTitle, fileData);
         });
     });
 };
+                                                             
