@@ -10,14 +10,13 @@ function parseMediaInfo(rawText) {
     let yearMatch = text.match(/\b(19\d\d|20\d\d)\b/);
     let detectedYear = yearMatch ? yearMatch[0] : null;
 
-    // सिर्फ असली वेब सीरीज़ के लिए (PART 01 को सीरीज नहीं मानेंगे)
     let isSeries = /(s\d+\s*e\d+|season\s*\d+|episode\s*\d+|ep\s*\d+|complete\s*series|web\s*series)/i.test(text);
     let isDubbed = /(hindi|dubbed|dual\s*audio)/i.test(text);
 
     let epMatch = text.match(/(s\d+\s*e\d+|season\s*\d+\s*ep\s*\d+|season\s*\d+|ep\s*\d+|episode\s*\d+|part\s*\d+|part\d+)/i);
     let episode = epMatch ? epMatch[0].toUpperCase() : '';
 
-    let qualityMatch = text.match(/(2160p|4k|1080p|720p|480p|fhd|uhd|hd|sd)/i);
+    let qualityMatch = text.match(/(2160p|4k|1080p|720p|480p|360p|260p|240p|fhd|uhd|hd|sd)/i);
     let quality = qualityMatch ? qualityMatch[0].toUpperCase() : '';
 
     let codecMatch = text.match(/(hevc|x265|h[\s\._-]*265|x264|h[\s\._-]*264|10bit|hdr|ddp[\s\._-]*5[\s\._-]*1|5[\s\._-]*1|2[\s\._-]*0|ds4k|ds|hq|v\d+)/i);
@@ -35,12 +34,12 @@ function parseMediaInfo(rawText) {
         .replace(/[\._\-]/g, ' ')
         .replace(/(https?:\/\/[^\s]+|t\.me\/[^\s]+|www\.[^\s]+|@\w+)/gi, ' ')
         .replace(/\b(sample|preview|trailer)\b/gi, ' ')
-        .replace(/\b(480p|720p|1080p|2160p|4k|fhd|uhd|hd|sd|webdl|web-dl|web\s*dl|webrip|bluray|hdrip|dvdrip|predvd|hdtc|esub|subs?|subtitles?)\b/gi, ' ')
+        .replace(/\b(480p|720p|1080p|2160p|4k|fhd|uhd|hd|sd|360p|260p|240p|26p|webdl|web-dl|web\s*dl|webrip|bluray|hdrip|dvdrip|predvd|hdtc|esub|subs?|subtitles?)\b/gi, ' ')
         .replace(/\b(x264|x265|hevc|h264|h265|avc|10bit|hdr|dv|aac20|aac|amzn|ddp51|ddp20|ddp|dd|hindi|english|telugu|tamil|punjabi|korean|dubbed|multi|dual\s*audio|org|original|full|mkv|nf|uplay|paramount|official|cinema|south\s*movie|south|movie|complete\s*web\s*series|complete\s*series|web\s*series|series|combined|all\s*part|ds4k|ds|primex|prime|hotstar|zee5|sonyliv|jiocinema|clipmatezone|bulmoviee|bulmovie)\b/gi, ' ')
-        .replace(/\b(hq|v[0-9]|v\d+|hind|hin|eng|tam|tel|part\s*\d+|part\d+)\b/gi, ' ')
+        .replace(/\b(hq|v[0-9]|v\d+|hind|hin|eng|tam|tel|part\s*\d+|part\d+|line|lines|clean|proper)\b/gi, ' ')
         .replace(/\b(s\d+\s*e\d+|season\s*\d+|ep\s*\d+|episode\s*\d+|s\d+|e\d+)\b/gi, ' ')
         .replace(/\b(19\d\d|20\d\d)\b/g, ' ')
-        .replace(/\b(20|51|71)\b/g, ' ')
+        .replace(/\b(20|51|71|26|260)\b/g, ' ')
         .replace(/\b265\b|\b264\b/gi, ' ')
         .replace(/\b[a-zA-Z0-9]{9,}\b/g, ' ')
         .replace(/\b[0-9]{1,2}$/g, ' ')
