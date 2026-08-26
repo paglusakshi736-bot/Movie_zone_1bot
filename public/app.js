@@ -49,8 +49,23 @@ async function loadMovies() {
 
         const moviesList = Array.isArray(data) ? data : (data.movies || []);
 
+        // 🔍 अगर सर्च करने पर मूवी नहीं मिली तो रिक्वेस्ट बॉक्स दिखाएं
         if (moviesList.length === 0) {
-            grid.innerHTML = '<div style="color:#94a3b8;grid-column:1/-1;text-align:center;padding:40px;">कोई मूवी/सीरीज़ नहीं मिली।</div>';
+            if (currentSearch) {
+                grid.innerHTML = `
+                    <div style="grid-column:1/-1;text-align:center;padding:35px 15px;background:#1e293b;border-radius:12px;border:1px dashed #475569;margin:10px 0;">
+                        <div style="font-size:36px;margin-bottom:8px;">🎬</div>
+                        <h4 style="color:#f1f5f9;margin:0 0 6px 0;font-size:15px;">"${currentSearch}" उपलब्ध नहीं है</h4>
+                        <p style="color:#94a3b8;font-size:12px;margin:0 0 16px 0;">क्या आप चाहते हैं कि हम इसे जल्द से जल्द अपलोड करें?</p>
+                        <button onclick="requestSearchedMovie('${currentSearch.replace(/'/g, "\\'")}', this)" 
+                                style="background:#e11d48;color:#fff;border:none;padding:10px 20px;border-radius:8px;font-size:13px;font-weight:600;cursor:pointer;box-shadow:0 4px 12px rgba(225,29,72,0.3);">
+                            📩 "${currentSearch}" के लिए रिक्वेस्ट भेजें
+                        </button>
+                    </div>
+                `;
+            } else {
+                grid.innerHTML = '<div style="color:#94a3b8;grid-column:1/-1;text-align:center;padding:40px;">कोई मूवी/सीरीज़ नहीं मिली।</div>';
+            }
             return;
         }
 
@@ -84,6 +99,69 @@ async function loadMovies() {
         });
     } catch (err) {
         grid.innerHTML = '<div style="color:#ef4444;grid-column:1/-1;text-align:center;padding:20px;">डेटा लोड करने में एरर आया!</div>';
+    }
+}
+
+// ⚡ सर्च रिज़ल्ट से सीधे वन-क्लिक रिक्वेस्ट भेजने का फ़ंक्शन
+async function requestSearchedMovie(movieName, btnElement) {
+    const user = tg?.initDataUnsafe?.user;
+
+    if (!user || !user.id) {
+        alert("⚠️ कृपया यह मिनी ऐप सीधे टेलीग्राम बॉट के अंदर से खोलें!");
+        return;
+    }
+
+    if (btnElement) {
+        btnElement.innerText = "भेजा जा रहा है...";
+        btnElement.disabled = true;
+    }
+
+    try {
+        const response = await fetch('/api/request', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+                userId: user.id,
+                username: user.username || '',
+                firstName: user.first_name || '',
+                movieName: movieName
+            })
+        });
+
+        const data = await response.json();
+
+        if (data.limitReached) {
+            const userChoice = confirm(
+                `⚠️ ${data.message}\n\nक्या आप अभी अपना इनवाइट लिंक दोस्तों के साथ शेयर करना चाहते हैं?`
+            );
+            if (userChoice) {
+                const shareUrl = `https://t.me/share/url?url=${encodeURIComponent(data.inviteLink)}&text=${encodeURIComponent('Join Movie Zone for latest movies and series!')}`;
+                if (tg && tg.openTelegramLink) tg.openTelegramLink(shareUrl);
+                else window.open(shareUrl, '_blank');
+            }
+            if (btnElement) {
+                btnElement.innerText = `📩 "${movieName}" के लिए रिक्वेस्ट भेजें`;
+                btnElement.disabled = false;
+            }
+        } else if (data.success) {
+            alert(data.message || "✅ रिक्वेस्ट एडमिन को भेज दी गई है!");
+            if (btnElement) {
+                btnElement.innerText = "✅ Request Sent!";
+                btnElement.style.background = "#10b981";
+            }
+        } else {
+            alert(data.message || "अनुरोध भेजने में विफल!");
+            if (btnElement) {
+                btnElement.innerText = `📩 "${movieName}" के लिए रिक्वेस्ट भेजें`;
+                btnElement.disabled = false;
+            }
+        }
+    } catch (e) {
+        alert("सर्वर से कनेक्ट करने में समस्या आई!");
+        if (btnElement) {
+            btnElement.innerText = `📩 "${movieName}" के लिए रिक्वेस्ट भेजें`;
+            btnElement.disabled = false;
+        }
     }
 }
 
