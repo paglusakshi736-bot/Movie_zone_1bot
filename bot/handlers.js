@@ -120,14 +120,28 @@ module.exports = function setupBotHandlers(bot) {
                 await user.save();
             }
 
-            if (payload && payload.startsWith('file_')) {
+                        if (payload && payload.startsWith('file_')) {
                 const fileId = payload.replace('file_', '');
-                return bot.sendDocument(msg.chat.id, fileId, {
-                    caption: "🎬 <b>आपकी अनलॉक की गई फ़ाइल!</b>\n\n⚠️ <i>यह फ़ाइल 10 मिनट में डिलीट हो जाएगी, इसे तुरंत Saved Messages में फॉरवर्ड कर लें।</i>",
+
+                const timerConfig = await Config.findOne({ key: 'auto_delete_timer' });
+                const deleteMinutes = (timerConfig && timerConfig.value) ? parseInt(timerConfig.value) : 10;
+
+                const sentMsg = await bot.sendDocument(msg.chat.id, fileId, {
+                    caption: `🎬 <b>आपकी अनलॉक की गई फ़ाइल!</b>\n\n⚠️ <i>यह फ़ाइल ${deleteMinutes} मिनट में डिलीट हो जाएगी, इसे तुरंत Saved Messages में फॉरवर्ड कर लें।</i>`,
                     parse_mode: 'HTML'
                 });
-            }
 
+                setTimeout(async () => {
+                    try {
+                        await bot.deleteMessage(msg.chat.id, sentMsg.message_id);
+                    } catch (err) {
+                        console.error('[Auto-Delete Error]:', err.message);
+                    }
+                }, deleteMinutes * 60 * 1000);
+
+                return;
+                        }
+            
             const appUrl = process.env.RENDER_EXTERNAL_URL || 'https://movie-zone-1bot.onrender.com';
             bot.sendMessage(msg.chat.id, `👋 नमस्ते <b>${msg.from.first_name || 'दोस्त'}</b>!\n\n🍿 Movie Zone Store खोलने के लिए नीचे दिए गए बटन पर क्लिक करें:`, {
                 parse_mode: 'HTML',
@@ -454,6 +468,27 @@ module.exports = function setupBotHandlers(bot) {
             bot.sendMessage(msg.chat.id, `✅ शॉर्टनर सेटिंग्स सेव हुईं!`, { parse_mode: 'HTML' });
         } catch (e) { bot.sendMessage(msg.chat.id, "❌ एरर: " + e.message); }
     });
+
+        // ऑटो-डिलीट टाइमर सेट करने के लिए (कमांड: /settimer 5)
+    bot.onText(/\/settimer\s+(\d+)/, async (msg, match) => {
+        if (!isAdmin(msg.from.id)) return;
+        const minutes = parseInt(match[1]);
+        if (minutes < 1) {
+            return bot.sendMessage(msg.chat.id, "⚠️ टाइमर कम से कम 1 मिनट होना चाहिए।");
+        }
+
+        try {
+            await Config.findOneAndUpdate(
+                { key: 'auto_delete_timer' },
+                { value: minutes },
+                { upsert: true }
+            );
+            bot.sendMessage(msg.chat.id, `⏱️ <b>ऑटो-डिलीट टाइमर सेट:</b> <code>${minutes} मिनट</code>`, { parse_mode: 'HTML' });
+        } catch (e) {
+            bot.sendMessage(msg.chat.id, "❌ एरर: " + e.message);
+        }
+    });
+    
 
     async function saveMovieToDB(bot, chatId, titleToUse, fileData) {
         const { fileId, fileType, fileSize, thumbFileId, label, isSeries, isDubbed, detectedYear } = fileData;
