@@ -1,5 +1,5 @@
 const express = require('express');
-const { Movie, User } = require('../models');
+const { Movie, User, Config } = require('../models');
 
 module.exports = function createApiRoutes(bot) {
     const router = express.Router();
@@ -50,10 +50,51 @@ module.exports = function createApiRoutes(bot) {
                 return res.status(400).json({ success: false, message: "Missing userId or fileId" });
             }
 
-            await bot.sendDocument(userId, fileId, {
-                caption: "🎬 <b>आपकी फ़ाइल तैयार है!</b>\n\n⚠️ <i>कृपया इसे तुरंत Saved Messages में फॉरवर्ड कर लें।</i>",
+            // 1. डेटाबेस से टाइमर और बैकअप चैनल लिंक निकालें
+            const timerConfig = await Config.findOne({ key: 'auto_delete_timer' });
+            const deleteMinutes = (timerConfig && timerConfig.value) ? parseInt(timerConfig.value) : 10;
+
+            const backupConfig = await Config.findOne({ key: 'backup_channel_link' });
+            const backupLink = (backupConfig && backupConfig.value) ? backupConfig.value : 'https://t.me/telegram';
+
+            // 2. फ़ाइल और मूवी का डेटा ढूँढें
+            const movie = await Movie.findOne({ "files.fileId": fileId });
+            let movieTitle = "Movie";
+            let movieYear = "";
+            let fileLabel = "HD";
+            let fileType = "document";
+
+            if (movie) {
+                movieTitle = movie.title || "Movie";
+                movieYear = movie.year ? ` (${movie.year})` : "";
+                const matchedFile = movie.files.find(f => f.fileId === fileId);
+                if (matchedFile) {
+                    fileLabel = matchedFile.label || "HD";
+                    fileType = matchedFile.fileType || "document";
+                }
+            }
+
+            // 3. रिच HTML कैप्शन
+            const caption = `🎬 <b>मूवी:</b> <a href="${backupLink}">${movieTitle}${movieYear}</a>\n` +
+                            `📦 <b>क्वालिटी:</b> ${fileLabel}\n` +
+                            `🤖 <b>बॉट:</b> @Movie_zone_1bot\n\n` +
+                            `⚠️ <i>यह फ़ाइल ${deleteMinutes} मिनट में डिलीट हो जाएगी, इसे तुरंत Saved Messages में फॉरवर्ड कर लें।</i>`;
+
+            // 4. फ़ाइल सेंड करें
+            const sendMethod = fileType === 'video' ? 'sendVideo' : 'sendDocument';
+            const sentMsg = await bot[sendMethod](userId, fileId, {
+                caption: caption,
                 parse_mode: 'HTML'
             });
+
+            // 5. ऑटो-डिलीट टाइमर
+            setTimeout(async () => {
+                try {
+                    await bot.deleteMessage(userId, sentMsg.message_id);
+                } catch (err) {
+                    console.error('[Auto-Delete Error]:', err.message);
+                }
+            }, deleteMinutes * 60 * 1000);
 
             res.json({ success: true, message: "फ़ाइल आपके बॉट चैट में भेज दी गई है!" });
         } catch (err) {
@@ -81,8 +122,7 @@ module.exports = function createApiRoutes(bot) {
                 await user.save();
             }
 
-            const botInfo = await bot.getMe();
-            const inviteLink = `https://t.me/${botInfo.username}?start=ref_${userId}`;
+            const inviteLink = `https://t.me/Movie_zone_1bot?start=ref_${userId}`;
 
             const hasUsedDailyFree = (user.lastRequestDate === today);
 
