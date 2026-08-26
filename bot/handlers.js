@@ -369,9 +369,14 @@ module.exports = function setupBotHandlers(bot) {
             const movieName = msg.caption.replace('/setposter', '').trim();
             const photoId = msg.photo[msg.photo.length - 1].file_id;
             try {
+                const fileObj = await bot.getFile(photoId);
+                const customPosterUrl = (fileObj && fileObj.file_path)
+                    ? `https://api.telegram.org/file/bot${bot.token}/${fileObj.file_path}`
+                    : null;
+
                 const movie = await Movie.findOneAndUpdate(
                     { title: new RegExp(`^${movieName}$`, 'i') },
-                    { thumbFileId: photoId, poster: null },
+                    { thumbFileId: photoId, poster: customPosterUrl },
                     { new: true }
                 );
                 if (movie) bot.sendMessage(msg.chat.id, `✅ <b>"${movie.title}"</b> का पोस्टर बदल दिया गया!`, { parse_mode: 'HTML' });
@@ -433,9 +438,21 @@ module.exports = function setupBotHandlers(bot) {
         try {
             const tmdbData = await fetchTMDBData(titleToUse, detectedYear, isSeries);
             const finalMovieTitle = tmdbData?.officialTitle || titleToUse;
-            const poster = tmdbData?.poster || null;
+            let poster = tmdbData?.poster || null;
             const rating = tmdbData?.rating || '8.0';
             const year = tmdbData?.year || detectedYear || '2026';
+
+            // 🌟 अगर TMDB पर पोस्टर नहीं मिलता है, तो टेलीग्राम का थंबनेल URL निकालें
+            if (!poster && thumbFileId) {
+                try {
+                    const fileObj = await bot.getFile(thumbFileId);
+                    if (fileObj && fileObj.file_path) {
+                        poster = `https://api.telegram.org/file/bot${bot.token}/${fileObj.file_path}`;
+                    }
+                } catch (e) {
+                    console.error('[Telegram Thumb Fetch Error]:', e.message);
+                }
+            }
 
             let finalCategory = tmdbData?.category || (isSeries ? 'Web Series' : 'Movie');
             if (!isSeries && isDubbed && finalCategory !== 'Hindi') {
