@@ -3,6 +3,7 @@ const { parseMediaInfo, formatBytes, fetchTMDBData } = require('./cleaner');
 
 const ADMIN_ID = process.env.ADMIN_ID;
 const adminDeleteSessions = {};
+const adminBroadcastSessions = {};
 const PAGE_LIMIT = 8;
 let uploadQueue = Promise.resolve();
 const adminFileQueue = {};
@@ -23,6 +24,7 @@ function isAdmin(userId) {
     return adminList.includes(userId.toString());
 }
 
+// 🗑️ डिलीट पैनल रेंडरर
 async function renderDeletePanel(bot, chatId, messageId = null, page = 1, searchQuery = '') {
     const query = searchQuery ? { title: new RegExp(searchQuery, 'i') } : {};
     const totalMovies = await Movie.countDocuments(query);
@@ -81,6 +83,47 @@ async function renderDeletePanel(bot, chatId, messageId = null, page = 1, search
     }
 }
 
+// 📢 स्मार्ट ब्रॉडकास्ट डाइजेस्ट पैनल रेंडरर
+async function renderBroadcastDigest(bot, chatId, messageId = null) {
+    const pendingMovies = await Movie.find({ broadcastStatus: 'pending' }).sort({ updatedAt: -1 }).limit(10);
+
+    if (pendingMovies.length === 0) {
+        const emptyText = "✅ <b>कोई पेंडिंग ब्रॉडकास्ट नहीं है!</b>\n(30 दिन के अंदर रिलीज़ हुई या 9.0+ रेटिंग वाली नई मूवीज़ यहाँ दिखेंगी)";
+        if (messageId) return bot.editMessageText(emptyText, { chat_id: chatId, message_id: messageId, parse_mode: 'HTML' });
+        return bot.sendMessage(chatId, emptyText, { parse_mode: 'HTML' });
+    }
+
+    if (!adminBroadcastSessions[chatId]) {
+        adminBroadcastSessions[chatId] = { selected: pendingMovies.map(m => m._id.toString()) };
+    }
+
+    const selectedIds = adminBroadcastSessions[chatId].selected;
+
+    let inline_keyboard = pendingMovies.map(m => {
+        const isSelected = selectedIds.includes(m._id.toString());
+        return [{
+            text: `${isSelected ? '✅' : '⬜'} ${m.title} (⭐ ${m.rating})`,
+            callback_data: `b_toggle_${m._id}`
+        }];
+    });
+
+    inline_keyboard.push([
+        { text: `🚀 Send Selected (${selectedIds.length})`, callback_data: `b_send_selected` },
+        { text: `❌ Dismiss All`, callback_data: `b_dismiss_all` }
+    ]);
+
+    let text = `📊 <b>दैनिक स्मार्ट ब्रॉडकास्ट डाइजेस्ट</b>\n\n` +
+               `फ़िल्टर शर्तें: <i>रिलीज़ ≤ 30 दिन या रेटिंग ≥ 9.0</i>\n` +
+               `पेंडिंग मूवीज़: <b>${pendingMovies.length}</b>\n\n` +
+               `मूवीज़ पर क्लिक करके सेलेक्ट/अनसेलेक्ट करें, फिर <b>Send Selected</b> दबाएं:`;
+
+    if (messageId) {
+        await bot.editMessageText(text, { chat_id: chatId, message_id: messageId, parse_mode: 'HTML', reply_markup: { inline_keyboard } });
+    } else {
+        await bot.sendMessage(chatId, text, { parse_mode: 'HTML', reply_markup: { inline_keyboard } });
+    }
+}
+
 module.exports = function setupBotHandlers(bot) {
     // 1. Start Command with Referral Tracking
     bot.onText(/\/start(?:\s+(.+))?/, async (msg, match) => {
@@ -120,7 +163,7 @@ module.exports = function setupBotHandlers(bot) {
                 await user.save();
             }
 
-                        if (payload && payload.startsWith('file_')) {
+            if (payload && payload.startsWith('file_')) {
                 const fileId = payload.replace('file_', '');
 
                 const timerConfig = await Config.findOne({ key: 'auto_delete_timer' });
@@ -140,7 +183,7 @@ module.exports = function setupBotHandlers(bot) {
                 }, deleteMinutes * 60 * 1000);
 
                 return;
-                        }
+            }
             
             const appUrl = process.env.RENDER_EXTERNAL_URL || 'https://movie-zone-1bot.onrender.com';
             bot.sendMessage(msg.chat.id, `👋 नमस्ते <b>${msg.from.first_name || 'दोस्त'}</b>!\n\n🍿 Movie Zone Store खोलने के लिए नीचे दिए गए बटन पर क्लिक करें:`, {
@@ -186,7 +229,7 @@ module.exports = function setupBotHandlers(bot) {
         }
     });
 
-    // 3. Request Command with Daily Limit & Referral Check
+    // 3. Request Command
     bot.onText(/\/request(?:\s+(.+))?/, async (msg, match) => {
         const reqMovie = match[1] ? match[1].trim() : '';
         if (!reqMovie) {
@@ -257,8 +300,9 @@ module.exports = function setupBotHandlers(bot) {
             const totalMovies = await Movie.countDocuments();
             const allMovies = await Movie.find();
             const totalFiles = allMovies.reduce((sum, m) => sum + (m.files ? m.files.length : 0), 0);
+            const pendingBroadcasts = await Movie.countDocuments({ broadcastStatus: 'pending' });
 
-            bot.sendMessage(msg.chat.id, `📊 <b>लाइव स्टेटिस्टिक्स</b>\n\n👥 <b>कुल यूज़र्स:</b> ${totalUsers}\n🎬 <b>कुल मूवी कार्ड्स:</b> ${totalMovies}\n📂 <b>कुल फाइल्स:</b> ${totalFiles}`, { parse_mode: 'HTML' });
+            bot.sendMessage(msg.chat.id, `📊 <b>लाइव स्टेटिस्टिक्स</b>\n\n👥 <b>कुल यूज़र्स:</b> ${totalUsers}\n🎬 <b>कुल मूवी कार्ड्स:</b> ${totalMovies}\n📂 <b>कुल फाइल्स:</b> ${totalFiles}\n📢 <b>पेंडिंग ब्रॉडकास्ट:</b> ${pendingBroadcasts}`, { parse_mode: 'HTML' });
         } catch (e) { bot.sendMessage(msg.chat.id, "❌ एरर: " + e.message); }
     });
 
@@ -272,19 +316,30 @@ module.exports = function setupBotHandlers(bot) {
         }
     });
 
+    // 📢 ब्रॉडकास्ट डाइजेस्ट कमांड
+    bot.onText(/\/broadcast_digest/, async (msg) => {
+        if (!isAdmin(msg.from.id)) return;
+        adminBroadcastSessions[msg.chat.id] = null;
+        await renderBroadcastDigest(bot, msg.chat.id);
+    });
+
     bot.onText(/\/broadcast (.+)/, async (msg, match) => {
         if (!isAdmin(msg.from.id)) return;
         const textToSend = match[1];
         try {
-            const users = await User.find();
+            const users = await User.find({ isBlocked: { $ne: true } });
             bot.sendMessage(msg.chat.id, `📢 ${users.length} यूज़र्स को ब्रॉडकास्ट भेजा जा रहा है...`);
             let success = 0;
             for (const u of users) {
                 try {
-                    await bot.sendMessage(u.userId, textToSend);
+                    await bot.sendMessage(u.userId, textToSend, { parse_mode: 'HTML' });
                     success++;
                     await new Promise(r => setTimeout(r, 40));
-                } catch (err) {}
+                } catch (err) {
+                    if (err.message && err.message.includes('bot was blocked')) {
+                        await User.updateOne({ userId: u.userId }, { isBlocked: true });
+                    }
+                }
             }
             bot.sendMessage(msg.chat.id, `✅ ब्रॉडकास्ट पूरा हुआ! सफलता: ${success}/${users.length}`);
         } catch (e) { bot.sendMessage(msg.chat.id, "❌ एरर: " + e.message); }
@@ -304,18 +359,18 @@ module.exports = function setupBotHandlers(bot) {
         const data = query.data;
 
         if (!isAdmin(userId)) return bot.answerCallbackQuery(query.id, { text: "❌ एक्सेस डिनाइड!", show_alert: true });
-        if (!adminDeleteSessions[chatId]) adminDeleteSessions[chatId] = { selected: [], page: 1, searchQuery: '' };
 
-        const session = adminDeleteSessions[chatId];
-
+        // 🗑️ Delete Panel Callbacks
         if (data === 'noop') {
             return bot.answerCallbackQuery(query.id);
         } else if (data.startsWith('page_')) {
+            const session = adminDeleteSessions[chatId] || { selected: [], page: 1, searchQuery: '' };
             const newPage = parseInt(data.replace('page_', ''));
             session.page = newPage;
             await renderDeletePanel(bot, chatId, messageId, newPage, session.searchQuery);
             await bot.answerCallbackQuery(query.id);
         } else if (data.startsWith('toggle_')) {
+            const session = adminDeleteSessions[chatId] || { selected: [], page: 1, searchQuery: '' };
             const movieId = data.replace('toggle_', '');
             if (session.selected.includes(movieId)) {
                 session.selected = session.selected.filter(id => id !== movieId);
@@ -325,12 +380,13 @@ module.exports = function setupBotHandlers(bot) {
             await renderDeletePanel(bot, chatId, messageId, session.page, session.searchQuery);
             await bot.answerCallbackQuery(query.id);
         } else if (data === 'confirm_bulk_del') {
+            const session = adminDeleteSessions[chatId] || { selected: [] };
             if (session.selected.length === 0) {
                 return bot.answerCallbackQuery(query.id, { text: "⚠️ कृपया पहले मूवी सेलेक्ट करें!", show_alert: true });
             }
             try {
                 const result = await Movie.deleteMany({ _id: { $in: session.selected } });
-                session.selected = [];
+                delete adminDeleteSessions[chatId];
                 await bot.answerCallbackQuery(query.id, { text: `✅ ${result.deletedCount} मूवीज़ डिलीट!` });
                 await bot.editMessageText(`🗑️ <b>सफलता:</b> कुल <b>${result.deletedCount}</b> मूवीज़ हटा दी गईं।`, { chat_id: chatId, message_id: messageId, parse_mode: 'HTML' });
             } catch (err) {
@@ -341,148 +397,85 @@ module.exports = function setupBotHandlers(bot) {
             await bot.editMessageText("❌ डिलीट ऑपरेशन रद्द।", { chat_id: chatId, message_id: messageId });
             await bot.answerCallbackQuery(query.id);
         }
-    });
 
-     bot.onText(/\/rename (.+)/, async (msg, match) => {
-    if (!isAdmin(msg.from.id)) return;
-    const parts = match[1].split('=');
-    if (parts.length !== 2) return bot.sendMessage(msg.chat.id, "⚠️ तरीका: <code>/rename Purana = Naya</code>", { parse_mode: 'HTML' });
-
-    const oldTitle = parts[0].trim();
-    const newTitle = parts[1].trim();
-
-    try {
-        const oldMovie = await Movie.findOne({ title: new RegExp(`^${oldTitle}$`, 'i') });
-        if (!oldMovie) {
-            return bot.sendMessage(msg.chat.id, `❌ "${oldTitle}" नाम से कोई मूवी नहीं मिली।`);
-        }
-
-        const tmdbData = await fetchTMDBData(newTitle);
-        const finalTitle = tmdbData?.officialTitle || newTitle;
-        const poster = tmdbData?.poster || oldMovie.poster;
-        const rating = tmdbData?.rating || oldMovie.rating || '8.0';
-        const year = tmdbData?.year || oldMovie.year || '2026';
-
-        let existingMovie = await Movie.findOne({ 
-            title: new RegExp(`^${finalTitle}$`, 'i'),
-            _id: { $ne: oldMovie._id }
-        });
-
-        if (existingMovie) {
-            existingMovie.files = existingMovie.files.concat(oldMovie.files || []);
-            if (poster && (!existingMovie.poster || existingMovie.poster.includes('placehold.co'))) {
-                existingMovie.poster = poster;
+        // 📢 Broadcast Panel Callbacks
+        else if (data.startsWith('b_toggle_')) {
+            const movieId = data.replace('b_toggle_', '');
+            if (!adminBroadcastSessions[chatId]) {
+                const pendingMovies = await Movie.find({ broadcastStatus: 'pending' });
+                adminBroadcastSessions[chatId] = { selected: pendingMovies.map(m => m._id.toString()) };
             }
-            existingMovie.updatedAt = new Date();
-            await existingMovie.save();
+            const session = adminBroadcastSessions[chatId];
+            if (session.selected.includes(movieId)) {
+                session.selected = session.selected.filter(id => id !== movieId);
+            } else {
+                session.selected.push(movieId);
+            }
+            await renderBroadcastDigest(bot, chatId, messageId);
+            await bot.answerCallbackQuery(query.id);
+        } else if (data === 'b_dismiss_all') {
+            await Movie.updateMany({ broadcastStatus: 'pending' }, { broadcastStatus: 'ignored' });
+            delete adminBroadcastSessions[chatId];
+            await bot.editMessageText("❌ सभी पेंडिंग ब्रॉडकास्ट रद्द कर दिए गए।", { chat_id: chatId, message_id: messageId });
+            await bot.answerCallbackQuery(query.id);
+        } else if (data === 'b_send_selected') {
+            const session = adminBroadcastSessions[chatId];
+            if (!session || session.selected.length === 0) {
+                return bot.answerCallbackQuery(query.id, { text: "⚠️ कोई मूवी सेलेक्ट नहीं की गई है!", show_alert: true });
+            }
 
-            await Movie.deleteOne({ _id: oldMovie._id });
+            const moviesToBroadcast = await Movie.find({ _id: { $in: session.selected } });
+            if (moviesToBroadcast.length === 0) return bot.answerCallbackQuery(query.id, { text: "मूवीज़ नहीं मिलीं!" });
 
-            bot.sendMessage(
-                msg.chat.id, 
-                `✅ <b>"${oldTitle}"</b> की फाइल्स को <b>"${existingMovie.title}"</b> में मर्ज कर दिया गया!\n📂 <b>कुल फाइल्स:</b> ${existingMovie.files.length}`, 
-                { parse_mode: 'HTML' }
-            );
-        } else {
-            oldMovie.title = finalTitle;
-            oldMovie.poster = poster;
-            oldMovie.rating = rating;
-            oldMovie.year = year;
-            oldMovie.updatedAt = new Date();
-            await oldMovie.save();
+            await bot.answerCallbackQuery(query.id, { text: "🚀 ब्रॉडकास्ट शुरू हो रहा है..." });
+            await bot.editMessageText("⏳ <b>ब्रॉडकास्ट भेजा जा रहा है...</b> कृपया इंतज़ार करें।", { chat_id: chatId, message_id: messageId, parse_mode: 'HTML' });
 
-            bot.sendMessage(msg.chat.id, `✅ नाम बदलकर <b>"${oldMovie.title}"</b> कर दिया गया!`, { parse_mode: 'HTML' });
+            const appUrl = process.env.RENDER_EXTERNAL_URL || 'https://movie-zone-1bot.onrender.com';
+            let broadcastText = `🔥 <b>ताज़ा और टॉप-रेटेड रिलीज़ेस जुड़ चुकी हैं!</b>\n\n`;
+
+            moviesToBroadcast.forEach((m, idx) => {
+                broadcastText += `${idx + 1}. 🎬 <b>${m.title}</b> (${m.year || '2026'})\n` +
+                                 `   ⭐ रेटिंग: <b>${m.rating || '8.0'}/10</b> | 🏷️ <b>${m.category}</b>\n\n`;
+            });
+
+            broadcastText += `👇 <i>अभी मिनी ऐप खोलकर फ़ाइल डाउनलोड करें:</i>`;
+
+            const reply_markup = {
+                inline_keyboard: [
+                    [{ text: '🚀 Open in Movie Mini App', web_app: { url: appUrl } }]
+                ]
+            };
+
+            const users = await User.find({ isBlocked: { $ne: true } });
+            let success = 0;
+
+            for (const u of users) {
+                try {
+                    await bot.sendMessage(u.userId, broadcastText, { parse_mode: 'HTML', reply_markup });
+                    success++;
+                    await new Promise(r => setTimeout(r, 40));
+                } catch (err) {
+                    if (err.message && err.message.includes('bot was blocked')) {
+                        await User.updateOne({ userId: u.userId }, { isBlocked: true });
+                    }
+                }
+            }
+
+            // मार्क एज़ सेंट
+            await Movie.updateMany({ _id: { $in: session.selected } }, { broadcastStatus: 'sent' });
+            delete adminBroadcastSessions[chatId];
+
+            await bot.sendMessage(chatId, `✅ <b>ब्रॉडकास्ट पूरा हुआ!</b>\nसफलतापूर्वक भेजा गया: <b>${success}/${users.length} यूज़र्स</b>`, { parse_mode: 'HTML' });
         }
-    } catch (e) { 
-        bot.sendMessage(msg.chat.id, "❌ एरर: " + e.message); 
-    }
-});
-
-
-    bot.on('photo', async (msg) => {
-        if (!isAdmin(msg.from.id)) return;
-        if (msg.caption && msg.caption.startsWith('/setposter')) {
-            const movieName = msg.caption.replace('/setposter', '').trim();
-            const photoId = msg.photo[msg.photo.length - 1].file_id;
-            try {
-                const fileObj = await bot.getFile(photoId);
-                const customPosterUrl = (fileObj && fileObj.file_path)
-                    ? `https://api.telegram.org/file/bot${bot.token}/${fileObj.file_path}`
-                    : null;
-
-                const movie = await Movie.findOneAndUpdate(
-                    { title: new RegExp(`^${movieName}$`, 'i') },
-                    { thumbFileId: photoId, poster: customPosterUrl },
-                    { new: true }
-                );
-                if (movie) bot.sendMessage(msg.chat.id, `✅ <b>"${movie.title}"</b> का पोस्टर बदल दिया गया!`, { parse_mode: 'HTML' });
-                else bot.sendMessage(msg.chat.id, `❌ मूवी नहीं मिली।`);
-            } catch (e) { bot.sendMessage(msg.chat.id, "❌ एरर: " + e.message); }
-        }
     });
 
-    bot.onText(/\/forcesub (on|off)/i, async (msg, match) => {
-        if (!isAdmin(msg.from.id)) return;
-        const status = match[1].toLowerCase() === 'on';
-        try {
-            await Config.findOneAndUpdate({ key: 'forcesub_enabled' }, { value: status }, { upsert: true });
-            bot.sendMessage(msg.chat.id, `🔒 Force Sub: <b>${status ? 'चालू (ON)' : 'बंद (OFF)'}</b>`, { parse_mode: 'HTML' });
-        } catch (e) { bot.sendMessage(msg.chat.id, "❌ एरर: " + e.message); }
-    });
-
-    bot.onText(/\/setchannel (.+)/, async (msg, match) => {
-        if (!isAdmin(msg.from.id)) return;
-        try {
-            await Config.findOneAndUpdate({ key: 'forcesub_channel' }, { value: match[1].trim() }, { upsert: true });
-            bot.sendMessage(msg.chat.id, `📢 चैनल सेट: <code>${match[1].trim()}</code>`, { parse_mode: 'HTML' });
-        } catch (e) { bot.sendMessage(msg.chat.id, "❌ एरर: " + e.message); }
-    });
-
-    bot.onText(/\/setgroup (.+)/, async (msg, match) => {
-        if (!isAdmin(msg.from.id)) return;
-        try {
-            await Config.findOneAndUpdate({ key: 'forcesub_group' }, { value: match[1].trim() }, { upsert: true });
-            bot.sendMessage(msg.chat.id, `💬 ग्रुप सेट: <code>${match[1].trim()}</code>`, { parse_mode: 'HTML' });
-        } catch (e) { bot.sendMessage(msg.chat.id, "❌ एरर: " + e.message); }
-    });
-
-    bot.onText(/\/shortener (on|off)/i, async (msg, match) => {
-        if (!isAdmin(msg.from.id)) return;
-        const status = match[1].toLowerCase() === 'on';
-        try {
-            await Config.findOneAndUpdate({ key: 'shortener_enabled' }, { value: status }, { upsert: true });
-            bot.sendMessage(msg.chat.id, `🔗 शॉर्टनर: <b>${status ? 'चालू (ON)' : 'बंद (OFF)'}</b>`, { parse_mode: 'HTML' });
-        } catch (e) { bot.sendMessage(msg.chat.id, "❌ एरर: " + e.message); }
-    });
-
-    bot.onText(/\/setshortener (.+)/, async (msg, match) => {
-        if (!isAdmin(msg.from.id)) return;
-        const input = match[1];
-        const domainMatch = input.match(/domain=([^\s]+)/i);
-        const apiMatch = input.match(/api=([^\s]+)/i);
-        if (!domainMatch || !apiMatch) return bot.sendMessage(msg.chat.id, "⚠️ तरीका: <code>/setshortener domain=gplinks.in api=YOUR_API_KEY</code>", { parse_mode: 'HTML' });
-
-        try {
-            await Config.findOneAndUpdate({ key: 'shortener_domain' }, { value: domainMatch[1] }, { upsert: true });
-            await Config.findOneAndUpdate({ key: 'shortener_api' }, { value: apiMatch[1] }, { upsert: true });
-            bot.sendMessage(msg.chat.id, `✅ शॉर्टनर सेटिंग्स सेव हुईं!`, { parse_mode: 'HTML' });
-        } catch (e) { bot.sendMessage(msg.chat.id, "❌ एरर: " + e.message); }
-    });
-
-        // ऑटो-डिलीट टाइमर सेट करने के लिए (कमांड: /settimer 5)
     bot.onText(/\/settimer\s+(\d+)/, async (msg, match) => {
         if (!isAdmin(msg.from.id)) return;
         const minutes = parseInt(match[1]);
-        if (minutes < 1) {
-            return bot.sendMessage(msg.chat.id, "⚠️ टाइमर कम से कम 1 मिनट होना चाहिए।");
-        }
+        if (minutes < 1) return bot.sendMessage(msg.chat.id, "⚠️ टाइमर कम से कम 1 मिनट होना चाहिए।");
 
         try {
-            await Config.findOneAndUpdate(
-                { key: 'auto_delete_timer' },
-                { value: minutes },
-                { upsert: true }
-            );
+            await Config.findOneAndUpdate({ key: 'auto_delete_timer' }, { value: minutes }, { upsert: true });
             bot.sendMessage(msg.chat.id, `⏱️ <b>ऑटो-डिलीट टाइमर सेट:</b> <code>${minutes} मिनट</code>`, { parse_mode: 'HTML' });
         } catch (e) {
             bot.sendMessage(msg.chat.id, "❌ एरर: " + e.message);
@@ -493,17 +486,12 @@ module.exports = function setupBotHandlers(bot) {
         if (!isAdmin(msg.from.id)) return;
         const link = match[1].trim();
         try {
-            await Config.findOneAndUpdate(
-                { key: 'backup_channel_link' },
-                { value: link },
-                { upsert: true }
-            );
+            await Config.findOneAndUpdate({ key: 'backup_channel_link' }, { value: link }, { upsert: true });
             bot.sendMessage(msg.chat.id, `📢 <b>बैकअप चैनल लिंक सेट:</b> <code>${link}</code>`, { parse_mode: 'HTML' });
         } catch (e) {
             bot.sendMessage(msg.chat.id, "❌ एरर: " + e.message);
         }
     });
-    
 
     async function saveMovieToDB(bot, chatId, titleToUse, fileData) {
         const { fileId, fileType, fileSize, thumbFileId, label, isSeries, isDubbed, detectedYear } = fileData;
@@ -513,8 +501,8 @@ module.exports = function setupBotHandlers(bot) {
             let poster = tmdbData?.poster || null;
             const rating = tmdbData?.rating || '8.0';
             const year = tmdbData?.year || detectedYear || '2026';
+            const releaseDate = tmdbData?.releaseDate ? new Date(tmdbData.releaseDate) : null;
 
-            // 🌟 अगर TMDB पर पोस्टर नहीं मिलता है, तो टेलीग्राम का थंबनेल URL निकालें
             if (!poster && thumbFileId) {
                 try {
                     const fileObj = await bot.getFile(thumbFileId);
@@ -529,6 +517,15 @@ module.exports = function setupBotHandlers(bot) {
             let finalCategory = tmdbData?.category || (isSeries ? 'Web Series' : 'Movie');
             if (!isSeries && isDubbed && finalCategory !== 'Hindi') {
                 finalCategory = 'Hindi';
+            }
+
+            // 🎯 स्मार्ट फ़िल्टरिंग: 30 दिन या 9.0+ रेटिंग
+            let isEligible = false;
+            if (parseFloat(rating) >= 9.0) {
+                isEligible = true;
+            } else if (releaseDate) {
+                const diffDays = Math.floor((new Date() - releaseDate) / (1000 * 60 * 60 * 24));
+                if (diffDays >= 0 && diffDays <= 30) isEligible = true;
             }
 
             let movie = await Movie.findOne({ 
@@ -548,12 +545,17 @@ module.exports = function setupBotHandlers(bot) {
                 movie.files.push({ label: finalLabel, fileId, fileType, fileSize });
                 if (thumbFileId && !movie.thumbFileId) movie.thumbFileId = thumbFileId;
                 if (poster && (!movie.poster || movie.poster.includes('placehold.co'))) movie.poster = poster;
+                if (isEligible && movie.broadcastStatus !== 'sent') {
+                    movie.broadcastStatus = 'pending';
+                    movie.isEligibleForBroadcast = true;
+                }
                 movie.updatedAt = new Date();
                 await movie.save();
 
                 await bot.sendMessage(
                     chatId,
-                    `✅ <b>मौजूदा कार्ड में नया वर्ज़न जोड़ा गया!</b>\n\n🎬 <b>मूवी:</b> ${movie.title}\n📦 <b>क्वालिटी:</b> ${finalLabel}\n📂 <b>कुल फाइल्स:</b> ${movie.files.length}`,
+                    `✅ <b>मौजूदा कार्ड में नया वर्ज़न जोड़ा गया!</b>\n\n🎬 <b>मूवी:</b> ${movie.title}\n📦 <b>क्वालिटी:</b> ${finalLabel}\n📂 <b>कुल फाइल्स:</b> ${movie.files.length}` +
+                    (isEligible ? `\n📢 <i>(स्मार्ट ब्रॉडकास्ट कतार में जोड़ी गई)</i>` : ''),
                     { parse_mode: 'HTML' }
                 );
             } else {
@@ -562,15 +564,19 @@ module.exports = function setupBotHandlers(bot) {
                     poster: poster,
                     rating,
                     year,
+                    releaseDate,
                     category: finalCategory,
                     thumbFileId,
+                    broadcastStatus: isEligible ? 'pending' : 'ignored',
+                    isEligibleForBroadcast: isEligible,
                     files: [{ label: finalLabel, fileId, fileType, fileSize }]
                 });
                 await movie.save();
 
                 await bot.sendMessage(
                     chatId,
-                    `✅ <b>नया कार्ड बना!</b>\n\n🎬 <b>मूवी:</b> ${finalMovieTitle}\n🏷️ <b>कैटेगरी:</b> ${finalCategory}\n📦 <b>क्वालिटी:</b> ${finalLabel}\n⭐ <b>रेटिंग:</b> ${rating}\n📅 <b>साल:</b> ${year}`,
+                    `✅ <b>नया कार्ड बना!</b>\n\n🎬 <b>मूवी:</b> ${finalMovieTitle}\n🏷️ <b>कैटेगरी:</b> ${finalCategory}\n📦 <b>क्वालिटी:</b> ${finalLabel}\n⭐ <b>रेटिंग:</b> ${rating}\n📅 <b>साल:</b> ${year}` +
+                    (isEligible ? `\n📢 <i>(स्मार्ट ब्रॉडकास्ट कतार में जोड़ी गई)</i>` : ''),
                     { parse_mode: 'HTML' }
                 );
             }
