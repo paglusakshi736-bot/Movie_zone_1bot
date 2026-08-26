@@ -329,39 +329,61 @@ module.exports = function setupBotHandlers(bot) {
         }
     });
 
-    bot.onText(/\/rename (.+)/, async (msg, match) => {
-        if (!isAdmin(msg.from.id)) return;
-        const parts = match[1].split('=');
-        if (parts.length !== 2) return bot.sendMessage(msg.chat.id, "⚠️ तरीका: <code>/rename Purana = Naya</code>", { parse_mode: 'HTML' });
+     bot.onText(/\/rename (.+)/, async (msg, match) => {
+    if (!isAdmin(msg.from.id)) return;
+    const parts = match[1].split('=');
+    if (parts.length !== 2) return bot.sendMessage(msg.chat.id, "⚠️ तरीका: <code>/rename Purana = Naya</code>", { parse_mode: 'HTML' });
 
-        const oldTitle = parts[0].trim();
-        const newTitle = parts[1].trim();
+    const oldTitle = parts[0].trim();
+    const newTitle = parts[1].trim();
 
-        try {
-            const tmdbData = await fetchTMDBData(newTitle);
-            const finalTitle = tmdbData?.officialTitle || newTitle;
-            const poster = tmdbData?.poster || null;
-            const rating = tmdbData?.rating || '8.0';
-            const year = tmdbData?.year || '2026';
-
-            const updateFields = { title: finalTitle, rating, year };
-            if (poster) updateFields.poster = poster;
-
-            const movie = await Movie.findOneAndUpdate(
-                { title: new RegExp(`^${oldTitle}$`, 'i') },
-                updateFields,
-                { new: true }
-            );
-
-            if (movie) {
-                bot.sendMessage(msg.chat.id, `✅ नाम बदलकर <b>"${movie.title}"</b> कर दिया गया और TMDB पोस्टर अपडेट हो गया!`, { parse_mode: 'HTML' });
-            } else {
-                bot.sendMessage(msg.chat.id, `❌ मूवी नहीं मिली।`);
-            }
-        } catch (e) { 
-            bot.sendMessage(msg.chat.id, "❌ एरर: " + e.message); 
+    try {
+        const oldMovie = await Movie.findOne({ title: new RegExp(`^${oldTitle}$`, 'i') });
+        if (!oldMovie) {
+            return bot.sendMessage(msg.chat.id, `❌ "${oldTitle}" नाम से कोई मूवी नहीं मिली।`);
         }
-    });
+
+        const tmdbData = await fetchTMDBData(newTitle);
+        const finalTitle = tmdbData?.officialTitle || newTitle;
+        const poster = tmdbData?.poster || oldMovie.poster;
+        const rating = tmdbData?.rating || oldMovie.rating || '8.0';
+        const year = tmdbData?.year || oldMovie.year || '2026';
+
+        let existingMovie = await Movie.findOne({ 
+            title: new RegExp(`^${finalTitle}$`, 'i'),
+            _id: { $ne: oldMovie._id }
+        });
+
+        if (existingMovie) {
+            existingMovie.files = existingMovie.files.concat(oldMovie.files || []);
+            if (poster && (!existingMovie.poster || existingMovie.poster.includes('placehold.co'))) {
+                existingMovie.poster = poster;
+            }
+            existingMovie.updatedAt = new Date();
+            await existingMovie.save();
+
+            await Movie.deleteOne({ _id: oldMovie._id });
+
+            bot.sendMessage(
+                msg.chat.id, 
+                `✅ <b>"${oldTitle}"</b> की फाइल्स को <b>"${existingMovie.title}"</b> में मर्ज कर दिया गया!\n📂 <b>कुल फाइल्स:</b> ${existingMovie.files.length}`, 
+                { parse_mode: 'HTML' }
+            );
+        } else {
+            oldMovie.title = finalTitle;
+            oldMovie.poster = poster;
+            oldMovie.rating = rating;
+            oldMovie.year = year;
+            oldMovie.updatedAt = new Date();
+            await oldMovie.save();
+
+            bot.sendMessage(msg.chat.id, `✅ नाम बदलकर <b>"${oldMovie.title}"</b> कर दिया गया!`, { parse_mode: 'HTML' });
+        }
+    } catch (e) { 
+        bot.sendMessage(msg.chat.id, "❌ एरर: " + e.message); 
+    }
+});
+
 
     bot.on('photo', async (msg) => {
         if (!isAdmin(msg.from.id)) return;
