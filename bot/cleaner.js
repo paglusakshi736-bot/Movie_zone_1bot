@@ -32,7 +32,7 @@ function parseMediaInfo(rawText) {
     if (audioInfo && !labelParts.includes(audioInfo)) labelParts.push(audioInfo);
     let label = labelParts.length > 0 ? labelParts.join(' - ') : 'Standard Quality';
 
-    // नाम साफ़ करने का सटीक क्रम
+    // नाम साफ़ करने का सटीक क्रम (Blura और 10bi को पूरी तरह हटाने के लिए)
     let clean = text
         .replace(/\[.*?\]/g, ' ')
         .replace(/\(.*?\)/g, ' ')
