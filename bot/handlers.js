@@ -489,6 +489,21 @@ module.exports = function setupBotHandlers(bot) {
         }
     });
     
+    bot.onText(/\/setbackup\s+(.+)/, async (msg, match) => {
+        if (!isAdmin(msg.from.id)) return;
+        const link = match[1].trim();
+        try {
+            await Config.findOneAndUpdate(
+                { key: 'backup_channel_link' },
+                { value: link },
+                { upsert: true }
+            );
+            bot.sendMessage(msg.chat.id, `📢 <b>बैकअप चैनल लिंक सेट:</b> <code>${link}</code>`, { parse_mode: 'HTML' });
+        } catch (e) {
+            bot.sendMessage(msg.chat.id, "❌ एरर: " + e.message);
+        }
+    });
+    
 
     async function saveMovieToDB(bot, chatId, titleToUse, fileData) {
         const { fileId, fileType, fileSize, thumbFileId, label, isSeries, isDubbed, detectedYear } = fileData;
