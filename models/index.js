@@ -8,6 +8,7 @@ const userSchema = new mongoose.Schema({
     referralCount: { type: Number, default: 0 },
     availableCredits: { type: Number, default: 0 },
     lastRequestDate: { type: String, default: '' },
+    isBlocked: { type: Boolean, default: false },
     createdAt: { type: Date, default: Date.now }
 });
 
@@ -16,6 +17,7 @@ const movieSchema = new mongoose.Schema({
     poster: { type: String, default: null },
     rating: { type: String, default: '8.0' },
     year: { type: String, default: '2026' },
+    releaseDate: { type: Date, default: null },
     category: { type: String, default: 'Movie' },
     thumbFileId: { type: String, default: null },
     files: [{
@@ -24,6 +26,12 @@ const movieSchema = new mongoose.Schema({
         fileType: String,
         fileSize: String
     }],
+    broadcastStatus: { 
+        type: String, 
+        enum: ['pending', 'sent', 'ignored'], 
+        default: 'ignored' 
+    },
+    isEligibleForBroadcast: { type: Boolean, default: false },
     updatedAt: { type: Date, default: Date.now }
 });
 
