@@ -19,31 +19,36 @@ function parseMediaInfo(rawText) {
     let qualityMatch = text.match(/(2160p|4k|1080p|720p|480p|360p|240p|fhd|uhd|hd|sd)/i);
     let quality = qualityMatch ? qualityMatch[0].toUpperCase() : '';
 
-    let codecMatch = text.match(/(hevc|x265|h[\s\._-]*265|x264|h[\s\._-]*264|10bit|hdr|ddp[\s\._-]*5[\s\._-]*1|5[\s\._-]*1|2[\s\._-]*0|ds4k|ds|hq|v\d+)/i);
+    let codecMatch = text.match(/(hevc|x265|h[\s\._-]*265|x264|h[\s\._-]*264|10[\s\._-]*bit|8[\s\._-]*bit|hdr|bluray|blu[\s\._-]*ray|bdrip|web[\s\._-]*dl|webrip)/i);
     let codecInfo = codecMatch ? codecMatch[0].replace(/[\s\._-]+/g, '').toUpperCase() : '';
+
+    let audioMatch = text.match(/(ddp[\s\._-]*5[\s\._-]*1|5[\s\._-]*1|2[\s\._-]*0|aac[\s\._-]*2[\s\._-]*0|aac|atmos|ac3)/i);
+    let audioInfo = audioMatch ? audioMatch[0].replace(/[\s\._-]+/g, '.').toUpperCase() : '';
 
     let labelParts = [];
     if (episode) labelParts.push(episode);
     if (quality) labelParts.push(quality);
     if (codecInfo && !labelParts.includes(codecInfo)) labelParts.push(codecInfo);
+    if (audioInfo && !labelParts.includes(audioInfo)) labelParts.push(audioInfo);
     let label = labelParts.length > 0 ? labelParts.join(' - ') : 'Standard Quality';
 
+    // नाम साफ़ करने का सटीक क्रम
     let clean = text
         .replace(/\[.*?\]/g, ' ')
         .replace(/\(.*?\)/g, ' ')
-        .replace(/[\._\-]/g, ' ')
         .replace(/(https?:\/\/[^\s]+|t\.me\/[^\s]+|www\.[^\s]+|@\w+)/gi, ' ')
-        .replace(/\b(sample|preview|trailer)\b/gi, ' ')
-        .replace(/\b(480p|720p|1080p|2160p|4k|fhd|uhd|hd|sd|360p|240p|webdl|web-dl|web\s*dl|webrip|bluray|hdrip|dvdrip|predvd|hdtc|esub|subs?|subtitles?)\b/gi, ' ')
-        .replace(/\b(x264|x265|hevc|h264|h265|avc|10bit|hdr|dv|aac20|aac|amzn|ddp51|ddp20|ddp|dd|hindi|english|telugu|tamil|punjabi|korean|dubbed|multi|dual\s*audio|org|original|full|mkv|nf|uplay|paramount|official|cinema|south\s*movie|south|movie|complete\s*web\s*series|complete\s*series|web\s*series|series|combined|all\s*part|ds4k|ds|primex|prime|hotstar|zee5|sonyliv|jiocinema|clipmatezone|bulmoviee|bulmovie)\b/gi, ' ')
-        .replace(/\b(hq|v[0-9]|v\d+|hind|hin|eng|tam|tel|part\s*\d+|part\d+|line|lines|clean|proper)\b/gi, ' ')
+        .replace(/[\._\-]/g, ' ')
+        .replace(/\b(sample|preview|trailer|reloaded|version|uncut|extended|remastered)\b/gi, ' ')
+        .replace(/\b(movies4u|bid|bolly4u|katmoviehd|vegamovies|filmyzilla|hdhub4u|uhdmovies|mkvcinemas|luxmovies|extramovies)\b/gi, ' ')
+        .replace(/\b(blu\s*ray|bluray|bdrip|brrip|dvdrip|web\s*dl|webdl|webrip|hdrip|hdtc|predvd)\b/gi, ' ')
+        .replace(/\b(10\s*bit|10bit|8\s*bit|8bit|hdr10|hdr|hevc|x265|x264|h265|h264|avc|remux|proper|hq)\b/gi, ' ')
+        .replace(/\b(480p|720p|1080p|2160p|4k|fhd|uhd|hd|sd|360p|240p)\b/gi, ' ')
+        .replace(/\b(ddp\s*5\s*1|5\s*1|2\s*0|aac\s*2\s*0|aac20|aac|dd\s*5\s*1|ddp20|ddp|dd|atmos|ac3)\b/gi, ' ')
+        .replace(/\b(hindi|english|telugu|tamil|punjabi|korean|dubbed|multi|dual\s*audio|org|original|full|esub|subs?|subtitles?)\b/gi, ' ')
+        .replace(/\b(south\s*movie|south|movie|complete\s*web\s*series|complete\s*series|web\s*series|series|combined|all\s*part|ds4k|ds|primex|prime|hotstar|zee5|sonyliv|jiocinema|clipmatezone|bulmoviee|bulmovie)\b/gi, ' ')
+        .replace(/\b(v[0-9]|v\d+|hind|hin|eng|tam|tel|part\s*\d+|part\d+|line|lines|clean)\b/gi, ' ')
         .replace(/\b(s\d+\s*e\d+|season\s*\d+|ep\s*\d+|episode\s*\d+|s\d+|e\d+)\b/gi, ' ')
         .replace(/\b(19\d\d|20\d\d)\b/g, ' ')
-        .replace(/\b(260p|26p|260|26)\b/gi, ' ')
-        .replace(/\b(2\s*0|5\s*1|7\s*1)\b/g, ' ')
-        .replace(/\b265\b|\b264\b/gi, ' ')
-        .replace(/\b[a-zA-Z0-9]{9,}\b/g, ' ')
-        .replace(/\b[a-zA-Z]\b/g, ' ')
         .replace(/[^\w\s]/gi, ' ')
         .replace(/\s+/g, ' ')
         .trim();
