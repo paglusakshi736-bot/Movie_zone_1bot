@@ -275,13 +275,22 @@ module.exports = function setupBotHandlers(bot) {
 
             await user.save();
 
-            const adminIds = ADMIN_ID ? ADMIN_ID.split(',').map(id => id.trim()) : [];
-            const requestText = `📩 <b>नई मूवी रिक्वेस्ट!</b>\n\n🎬 <b>मूवी:</b> ${reqMovie}\n👤 <b>यूज़र:</b> ${msg.from.first_name || 'User'} (@${msg.from.username || 'N/A'})\n🆔 <b>ID:</b> <code>${userId}</code>`;
+        const adminIds = ADMIN_ID ? ADMIN_ID.split(',').map(id => id.trim()) : [];
+        const requestText = `📩 <b>नई मूवी रिक्वेस्ट!</b>\n\n🎬 <b>मूवी:</b> <code>${reqMovie}</code>\n👤 <b>यूज़र:</b> ${msg.from.first_name || 'User'} (@${msg.from.username || 'N/A'})\n🆔 <b>ID:</b> <code>${userId}</code>`;
 
-            for (const id of adminIds) {
-                await bot.sendMessage(id, requestText, { parse_mode: 'HTML' }).catch(() => {});
-            }
+        const reply_markup = {
+            inline_keyboard: [
+                [
+                    { text: '✅ Uploaded', callback_data: `req_done_${userId}_${encodeURIComponent(reqMovie)}` },
+                    { text: '❌ Reject', callback_data: `req_rej_${userId}_${encodeURIComponent(reqMovie)}` }
+                ]
+            ]
+        };
 
+        for (const id of adminIds) {
+            await bot.sendMessage(id, requestText, { parse_mode: 'HTML', reply_markup }).catch(() => {});
+        }
+            
             bot.sendMessage(
                 msg.chat.id,
                 `✅ आपकी रिक्वेस्ट <b>"${reqMovie}"</b> एडमिन को भेज दी गई है!\n\n` +
@@ -526,6 +535,57 @@ module.exports = function setupBotHandlers(bot) {
 
             await bot.sendMessage(chatId, `✅ <b>ब्रॉडकास्ट पूरा हुआ!</b>\nसफलतापूर्वक भेजा गया: <b>${success}/${users.length} यूज़र्स</b>`, { parse_mode: 'HTML' });
         }
+                // 📩 मूवी रिक्वेस्ट एक्शन्स (Uploaded / Reject)
+        else if (data.startsWith('req_done_')) {
+            const parts = data.replace('req_done_', '').split('_');
+            const targetUserId = parts[0];
+            const requestedTitle = decodeURIComponent(parts.slice(1).join('_'));
+            const appUrl = process.env.RENDER_EXTERNAL_URL || 'https://movie-zone-1bot.onrender.com';
+
+            try {
+                await bot.sendMessage(
+                    targetUserId,
+                    `🎉 <b>आपकी रिक्वेस्ट पूरी हो गई है!</b>\n\n🎬 मूवी/सीरीज़: <b>${requestedTitle}</b> अब स्टोर में उपलब्ध है।\n\n👇 नीचे क्लिक करके तुरंत देखें:`,
+                    {
+                        parse_mode: 'HTML',
+                        reply_markup: {
+                            inline_keyboard: [
+                                [{ text: '🚀 Open Mini App', web_app: { url: appUrl } }]
+                            ]
+                        }
+                    }
+                );
+
+                await bot.answerCallbackQuery(query.id, { text: "✅ यूज़र को नोटिफिकेशन भेज दिया गया!" });
+                await bot.editMessageText(
+                    `${query.message.text}\n\n✅ <b>स्टेटस:</b> अपलोड पूरा हुआ और यूज़र को सूचित कर दिया गया।`,
+                    { chat_id: chatId, message_id: messageId, parse_mode: 'HTML' }
+                );
+            } catch (err) {
+                await bot.answerCallbackQuery(query.id, { text: "⚠️ यूज़र को मैसेज नहीं भेजा जा सका!" });
+            }
+        } else if (data.startsWith('req_rej_')) {
+            const parts = data.replace('req_rej_', '').split('_');
+            const targetUserId = parts[0];
+            const requestedTitle = decodeURIComponent(parts.slice(1).join('_'));
+
+            try {
+                await bot.sendMessage(
+                    targetUserId,
+                    `⚠️ <b>माफ़ी चाहते हैं!</b>\n\nआपकी रिक्वेस्ट की गई सामग्री <b>"${requestedTitle}"</b> वर्तमान में उपलब्ध नहीं कराई जा सकी।`,
+                    { parse_mode: 'HTML' }
+                );
+
+                await bot.answerCallbackQuery(query.id, { text: "❌ रिक्वेस्ट रिजेक्ट कर दी गई!" });
+                await bot.editMessageText(
+                    `${query.message.text}\n\n❌ <b>स्टेटस:</b> रिजेक्ट कर दिया गया।`,
+                    { chat_id: chatId, message_id: messageId, parse_mode: 'HTML' }
+                );
+            } catch (err) {
+                await bot.answerCallbackQuery(query.id, { text: "एरर: " + err.message });
+            }
+        }
+        
     });
 
     bot.onText(/\/settimer\s+(\d+)/, async (msg, match) => {
