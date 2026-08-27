@@ -49,7 +49,6 @@ async function loadMovies() {
 
         const moviesList = Array.isArray(data) ? data : (data.movies || []);
 
-        // 🔍 अगर सर्च करने पर मूवी नहीं मिली तो रिक्वेस्ट बॉक्स दिखाएं
         if (moviesList.length === 0) {
             if (currentSearch) {
                 grid.innerHTML = `
@@ -77,12 +76,12 @@ async function loadMovies() {
             const fileCount = movie.files ? movie.files.length : 1;
 
             card.innerHTML = `
-                <div class="poster-container" style="position:relative;width:100%;aspect-ratio:2/3;background:#0f172a;">
-                    <img src="${posterSrc}" alt="${movie.title}" style="width:100%;height:100%;object-fit:contain;background:#000;" loading="lazy">
-                    <div class="badge-count" style="position:absolute;top:8px;right:8px;background:rgba(0,0,0,0.75);color:#f43f5e;font-size:11px;font-weight:700;padding:2px 6px;border-radius:4px;border:1px solid #f43f5e;">${fileCount} Files</div>
+                <div class="poster-container" style="position:relative;width:100%;aspect-ratio:3/4;background:#1e293b;overflow:hidden;border-radius:10px 10px 0 0;">
+                    <img src="${posterSrc}" alt="${movie.title}" style="width:100%;height:100%;object-fit:cover;display:block;" loading="lazy">
+                    <div class="badge-count" style="position:absolute;top:8px;right:8px;background:rgba(0,0,0,0.8);color:#f43f5e;font-size:11px;font-weight:700;padding:3px 7px;border-radius:6px;border:1px solid rgba(244,63,94,0.6);backdrop-filter:blur(4px);">${fileCount} Files</div>
                 </div>
                 <div class="movie-info" style="padding:10px;display:flex;flex-direction:column;flex-grow:1;justify-content:space-between;">
-                    <div class="movie-title" style="font-size:13px;font-weight:600;color:#f1f5f9;margin-bottom:6px;line-height:1.3;">${movie.title}</div>
+                    <div class="movie-title" style="font-size:13px;font-weight:600;color:#f1f5f9;margin-bottom:6px;line-height:1.3;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden;">${movie.title}</div>
                     <div class="movie-meta" style="display:flex;justify-content:space-between;font-size:11px;color:#94a3b8;margin-bottom:8px;">
                         <span>⭐ ${movie.rating || '8.0'}</span>
                         <span>📅 ${movie.year || '2026'}</span>
@@ -102,7 +101,6 @@ async function loadMovies() {
     }
 }
 
-// ⚡ सर्च रिज़ल्ट से सीधे वन-क्लिक रिक्वेस्ट भेजने का फ़ंक्शन
 async function requestSearchedMovie(movieName, btnElement) {
     const user = tg?.initDataUnsafe?.user;
 
