@@ -4,7 +4,7 @@ const { Movie, User, Config } = require('../models');
 module.exports = function createApiRoutes(bot) {
     const router = express.Router();
 
-     router.get('/movies', async (req, res) => {
+    router.get('/movies', async (req, res) => {
         try {
             const { search, category, year, page = 1, limit = 20 } = req.query;
             let query = {};
@@ -31,6 +31,16 @@ module.exports = function createApiRoutes(bot) {
                     query.$or = [{ category: 'Hindi' }, { category: 'Bollywood' }];
                 } else if (category === 'South') {
                     query.category = 'South';
+                } else if (category === 'Others') {
+                    query.category = 'Others';
+                } else if (category === 'needs_fix') {
+                    // ⚠️ एरर वाले कार्ड्स, रैंडम नाम या जिनका पोस्टर नहीं मिला
+                    query.$or = [
+                        { category: 'Others' },
+                        { title: { $regex: /Unknown_|Unnamed|@|\.mkv|\.mp4|720p|1080p|HEVC|x264/i } },
+                        { poster: { $regex: /placehold\.co/i } },
+                        { poster: null }
+                    ];
                 } else {
                     query.category = { $regex: `^${category}$`, $options: 'i' };
                 }
@@ -57,7 +67,6 @@ module.exports = function createApiRoutes(bot) {
             res.status(500).json({ error: err.message });
         }
     });
-    
 
     router.get('/bot-info', async (req, res) => {
         try {
