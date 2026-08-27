@@ -275,21 +275,21 @@ module.exports = function setupBotHandlers(bot) {
 
             await user.save();
 
-        const adminIds = ADMIN_ID ? ADMIN_ID.split(',').map(id => id.trim()) : [];
-        const requestText = `📩 <b>नई मूवी रिक्वेस्ट!</b>\n\n🎬 <b>मूवी:</b> <code>${reqMovie}</code>\n👤 <b>यूज़र:</b> ${msg.from.first_name || 'User'} (@${msg.from.username || 'N/A'})\n🆔 <b>ID:</b> <code>${userId}</code>`;
+            const adminIds = ADMIN_ID ? ADMIN_ID.split(',').map(id => id.trim()) : [];
+            const requestText = `📩 <b>नई मूवी रिक्वेस्ट!</b>\n\n🎬 <b>मूवी:</b> <code>${reqMovie}</code>\n👤 <b>यूज़र:</b> ${msg.from.first_name || 'User'} (@${msg.from.username || 'N/A'})\n🆔 <b>ID:</b> <code>${userId}</code>`;
 
-        const reply_markup = {
-            inline_keyboard: [
-                [
-                    { text: '✅ Uploaded', callback_data: `req_done_${userId}_${encodeURIComponent(reqMovie)}` },
-                    { text: '❌ Reject', callback_data: `req_rej_${userId}_${encodeURIComponent(reqMovie)}` }
+            const reply_markup = {
+                inline_keyboard: [
+                    [
+                        { text: '✅ Uploaded', callback_data: `req_done_${userId}_${encodeURIComponent(reqMovie)}` },
+                        { text: '❌ Reject', callback_data: `req_rej_${userId}_${encodeURIComponent(reqMovie)}` }
+                    ]
                 ]
-            ]
-        };
+            };
 
-        for (const id of adminIds) {
-            await bot.sendMessage(id, requestText, { parse_mode: 'HTML', reply_markup }).catch(() => {});
-        }
+            for (const id of adminIds) {
+                await bot.sendMessage(id, requestText, { parse_mode: 'HTML', reply_markup }).catch(() => {});
+            }
             
             bot.sendMessage(
                 msg.chat.id,
@@ -325,7 +325,7 @@ module.exports = function setupBotHandlers(bot) {
         }
     });
 
-            // 🏷️ स्मार्ट रीनेम, साल और कस्टम पोस्टर सपोर्ट
+    // 🏷️ स्मार्ट रीनेम, साल और कस्टम पोस्टर सपोर्ट
     bot.onText(/\/rename (.+)/, async (msg, match) => {
         if (!isAdmin(msg.from.id)) return;
         const parts = match[1].split('=');
@@ -357,6 +357,7 @@ module.exports = function setupBotHandlers(bot) {
             const poster = customPoster || tmdbData?.poster || oldMovie.poster;
             const rating = tmdbData?.rating || oldMovie.rating || '8.0';
             const year = targetYear || tmdbData?.year || oldMovie.year || '2026';
+            const category = tmdbData?.category || (oldMovie.category === 'Others' ? 'Hindi' : oldMovie.category);
 
             let existingMovie = await Movie.findOne({ 
                 title: new RegExp(`^${finalTitle}$`, 'i'),
@@ -380,16 +381,16 @@ module.exports = function setupBotHandlers(bot) {
                 oldMovie.poster = poster;
                 oldMovie.rating = rating;
                 oldMovie.year = year;
+                oldMovie.category = category;
                 oldMovie.updatedAt = new Date();
                 await oldMovie.save();
 
-                bot.sendMessage(msg.chat.id, `✅ <b>अपडेट सफल!</b>\n🎬 <b>टाइटल:</b> ${oldMovie.title}\n📅 <b>वर्ष:</b> ${oldMovie.year}`, { parse_mode: 'HTML' });
+                bot.sendMessage(msg.chat.id, `✅ <b>अपडेट सफल!</b>\n🎬 <b>टाइटल:</b> ${oldMovie.title}\n📅 <b>वर्ष:</b> ${oldMovie.year}\n🏷️ <b>कैटेगरी:</b> ${oldMovie.category}`, { parse_mode: 'HTML' });
             }
         } catch (e) { 
             bot.sendMessage(msg.chat.id, "❌ एरर: " + e.message); 
         }
     });
-    
 
     // 📢 ब्रॉडकास्ट डाइजेस्ट कमांड
     bot.onText(/\/broadcast_digest/, async (msg) => {
@@ -536,13 +537,12 @@ module.exports = function setupBotHandlers(bot) {
                 }
             }
 
-            // मार्क एज़ सेंट
             await Movie.updateMany({ _id: { $in: session.selected } }, { broadcastStatus: 'sent' });
             delete adminBroadcastSessions[chatId];
 
             await bot.sendMessage(chatId, `✅ <b>ब्रॉडकास्ट पूरा हुआ!</b>\nसफलतापूर्वक भेजा गया: <b>${success}/${users.length} यूज़र्स</b>`, { parse_mode: 'HTML' });
         }
-                // 📩 मूवी रिक्वेस्ट एक्शन्स (Uploaded / Reject)
+        // 📩 मूवी रिक्वेस्ट एक्शन्स
         else if (data.startsWith('req_done_')) {
             const parts = data.replace('req_done_', '').split('_');
             const targetUserId = parts[0];
@@ -592,7 +592,6 @@ module.exports = function setupBotHandlers(bot) {
                 await bot.answerCallbackQuery(query.id, { text: "एरर: " + err.message });
             }
         }
-        
     });
 
     bot.onText(/\/settimer\s+(\d+)/, async (msg, match) => {
@@ -620,7 +619,7 @@ module.exports = function setupBotHandlers(bot) {
     });
 
     async function saveMovieToDB(bot, chatId, titleToUse, fileData) {
-        const { fileId, fileType, fileSize, thumbFileId, label, isSeries, isDubbed, detectedYear } = fileData;
+        const { fileId, fileType, fileSize, thumbFileId, label, isSeries, isDubbed, detectedYear, isOther } = fileData;
         try {
             const tmdbData = await fetchTMDBData(titleToUse, detectedYear, isSeries);
             const finalMovieTitle = tmdbData?.officialTitle || titleToUse;
@@ -640,8 +639,9 @@ module.exports = function setupBotHandlers(bot) {
                 }
             }
 
-            let finalCategory = tmdbData?.category || (isSeries ? 'Web Series' : 'Movie');
-            if (!isSeries && isDubbed && finalCategory !== 'Hindi') {
+            // 📁 अगर रैंडम कोड/बिना नाम वाली फाइल है तो Others कैटेगरी में डालें
+            let finalCategory = isOther ? 'Others' : (tmdbData?.category || (isSeries ? 'Web Series' : 'Movie'));
+            if (!isSeries && isDubbed && finalCategory !== 'Hindi' && !isOther) {
                 finalCategory = 'Hindi';
             }
 
@@ -680,7 +680,7 @@ module.exports = function setupBotHandlers(bot) {
 
                 await bot.sendMessage(
                     chatId,
-                    `✅ <b>मौजूदा कार्ड में नया वर्ज़न जोड़ा गया!</b>\n\n🎬 <b>मूवी:</b> ${movie.title}\n📦 <b>क्वालिटी:</b> ${finalLabel}\n📂 <b>कुल फाइल्स:</b> ${movie.files.length}` +
+                    `✅ <b>मौजूदा कार्ड में नया भाग/क्वालिटी जुड़ गया! (Auto-Merged)</b>\n\n🎬 <b>मूवी:</b> ${movie.title}\n📦 <b>क्वालिटी:</b> ${finalLabel}\n📂 <b>कुल फाइल्स:</b> ${movie.files.length}` +
                     (isEligible ? `\n📢 <i>(स्मार्ट ब्रॉडकास्ट कतार में जोड़ी गई)</i>` : ''),
                     { parse_mode: 'HTML' }
                 );
@@ -749,13 +749,13 @@ module.exports = function setupBotHandlers(bot) {
                 } catch (e) {}
             }
 
-            const { cleanTitle, label, isSeries, isDubbed, detectedYear } = parseMediaInfo(rawInput);
+            const { cleanTitle, label, isSeries, isDubbed, detectedYear, isOther } = parseMediaInfo(rawInput);
             const fileId = file.file_id;
             const fileType = msg.video ? 'video' : 'document';
             const fileSize = formatBytes(file.file_size);
             let thumbFileId = file.thumbnail ? file.thumbnail.file_id : null;
 
-            const fileData = { fileId, fileType, fileSize, thumbFileId, label, isSeries, isDubbed, detectedYear };
+            const fileData = { fileId, fileType, fileSize, thumbFileId, label, isSeries, isDubbed, detectedYear, isOther };
 
             if (!cleanTitle) {
                 if (!adminFileQueue[msg.chat.id]) adminFileQueue[msg.chat.id] = [];
