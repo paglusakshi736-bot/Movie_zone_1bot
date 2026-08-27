@@ -4,20 +4,45 @@ const { Movie, User, Config } = require('../models');
 module.exports = function createApiRoutes(bot) {
     const router = express.Router();
 
-    router.get('/movies', async (req, res) => {
+     router.get('/movies', async (req, res) => {
         try {
-            const { search, category, page = 1, limit = 20 } = req.query;
+            const { search, category, year, page = 1, limit = 20 } = req.query;
             let query = {};
 
-            if (search) {
-                query.title = { $regex: search, $options: 'i' };
+            // 🔍 सर्च फ़िल्टर
+            if (search && search.trim() !== '') {
+                query.title = { $regex: search.trim(), $options: 'i' };
             }
+
+            // 📅 साल फ़िल्टर
+            if (year && year !== 'All') {
+                query.year = year;
+            }
+
+            // 🏷️ स्मार्ट कैटेगरी फ़िल्टर
             if (category && category !== 'All') {
-                query.category = category;
+                if (category === 'Latest') {
+                    query.isBlocked = { $ne: true };
+                } else if (category === 'Web Series') {
+                    query.$or = [{ category: 'Web Series' }, { isSeries: true }];
+                } else if (category === 'Hollywood') {
+                    query.category = 'Hollywood';
+                } else if (category === 'Hindi' || category === 'Bollywood') {
+                    query.$or = [{ category: 'Hindi' }, { category: 'Bollywood' }];
+                } else if (category === 'South') {
+                    query.category = 'South';
+                } else {
+                    query.category = { $regex: `^${category}$`, $options: 'i' };
+                }
+            }
+
+            let sortOption = { updatedAt: -1 };
+            if (category === 'Latest') {
+                sortOption = { _id: -1 };
             }
 
             const movies = await Movie.find(query)
-                .sort({ updatedAt: -1 })
+                .sort(sortOption)
                 .skip((page - 1) * limit)
                 .limit(parseInt(limit));
 
@@ -32,6 +57,7 @@ module.exports = function createApiRoutes(bot) {
             res.status(500).json({ error: err.message });
         }
     });
+    
 
     router.get('/bot-info', async (req, res) => {
         try {
