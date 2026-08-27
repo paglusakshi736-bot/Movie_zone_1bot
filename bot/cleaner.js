@@ -32,7 +32,7 @@ function parseMediaInfo(rawText) {
     if (audioInfo && !labelParts.includes(audioInfo)) labelParts.push(audioInfo);
     let label = labelParts.length > 0 ? labelParts.join(' - ') : 'Standard Quality';
 
-    // 🧹 नाम को पूरी तरह साफ़ और अनचाहे टैग्स (Comple, Esubs, C 002 आदि) को हटाने का फ़िल्टर
+    // 🧹 Clean Up Company और बाकी नामों को सुरक्षित रखते हुए अनचाहे टैग्स हटाना
     let clean = text
         .replace(/\[.*?\]/g, ' ')
         .replace(/\(.*?\)/g, ' ')
@@ -46,8 +46,8 @@ function parseMediaInfo(rawText) {
         .replace(/\b(ddp\s*5\s*1|5\s*1|2\s*0|aac\s*2\s*0|aac20|aac|dd\s*5\s*1|ddp20|ddp|dd|atmos|ac3)\b/gi, ' ')
         .replace(/\b(hindi|english|telugu|tamil|punjabi|korean|dubbed|multi|dual\s*audio|org|original|full|esubs?|esub|subs?|subtitles?)\b/gi, ' ')
         .replace(/\b(complete\s*web\s*series|complete\s*series|complet|comple|complete|web\s*series|series|combined|all\s*part|ds4k|ds|primex|prime|hotstar|zee5|sonyliv|jiocinema|clipmatezone|bulmoviee|bulmovie)\b/gi, ' ')
-        .replace(/\b(south\s*movie|south|movie|up\s*company)\b/gi, ' ')
-        .replace(/\b(c\s*\d+|c\d+|v[0-9]|v\d+|hind|hin|eng|tam|tel|part\s*\d+|part\d+|line|lines|clean)\b/gi, ' ')
+        .replace(/\b(south\s*movie|south|movie)\b/gi, ' ')
+        .replace(/\b(c\s*\d+|c\d+|v[0-9]|v\d+|hind|hin|eng|tam|tel|part\s*\d+|part\d+|line|lines)\b/gi, ' ')
         .replace(/\b(s\d+\s*e\d+|season\s*\d+|ep\s*\d+|episode\s*\d+|s\d+|e\d+)\b/gi, ' ')
         .replace(/\b(19\d\d|20\d\d)\b/g, ' ')
         .replace(/[^\w\s]/gi, ' ')
