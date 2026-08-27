@@ -110,7 +110,9 @@ window.applyCategoryFilter = function(category, element) {
         'hollywood': 'Hollywood',
         'hindi': 'Hindi',
         'web series': 'Web Series',
-        'south': 'South'
+        'south': 'South',
+        'others': 'Others',
+        'needs_fix': 'needs_fix'
     };
 
     currentCategory = catMap[category.toLowerCase()] || category;
@@ -141,7 +143,6 @@ async function loadMovies(reset = false) {
         grid.innerHTML = '<div style="color:#94a3b8;grid-column:1/-1;text-align:center;padding:30px;">लोड हो रहा है...</div>';
     }
 
-    // Load More बटन का कंटेनर हटाना अगर पहले से हो
     const oldBtn = document.getElementById('loadMoreBtnContainer');
     if (oldBtn) oldBtn.remove();
 
@@ -173,7 +174,10 @@ async function loadMovies(reset = false) {
                     </div>
                 `;
             } else {
-                grid.innerHTML = '<div style="color:#94a3b8;grid-column:1/-1;text-align:center;padding:40px;">कोई मूवी/सीरीज़ नहीं मिली।</div>';
+                const emptyMsg = currentCategory === 'needs_fix' 
+                    ? '✅ किसी भी मूवी के नाम में कोई एरर नहीं है!' 
+                    : (currentCategory === 'Others' ? '📁 कोई अननेम्ड फ़ाइल नहीं है।' : 'कोई मूवी/सीरीज़ नहीं मिली।');
+                grid.innerHTML = `<div style="color:#94a3b8;grid-column:1/-1;text-align:center;padding:40px;">${emptyMsg}</div>`;
             }
             isLoading = false;
             return;
@@ -458,7 +462,7 @@ document.addEventListener('DOMContentLoaded', () => {
         });
     }
 
-    // 📜 ऑटोमैटिक इन्फिनिट स्क्रॉल (जब यूज़र नीचे पहुँचेगा, अगला पेज अपने आप लोड होगा)
+    // 📜 ऑटोमैटिक इन्फिनिट स्क्रॉल
     window.addEventListener('scroll', () => {
         if ((window.innerHeight + window.scrollY) >= document.body.offsetHeight - 300) {
             if (!isLoading && currentPage < totalPages) {
