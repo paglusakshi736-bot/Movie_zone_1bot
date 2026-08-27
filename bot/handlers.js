@@ -325,16 +325,26 @@ module.exports = function setupBotHandlers(bot) {
         }
     });
 
-        // 🏷️ रीनेम और ऑटो-मर्ज कमांड
+            // 🏷️ स्मार्ट रीनेम, साल और कस्टम पोस्टर सपोर्ट
     bot.onText(/\/rename (.+)/, async (msg, match) => {
         if (!isAdmin(msg.from.id)) return;
         const parts = match[1].split('=');
-        if (parts.length !== 2) {
-            return bot.sendMessage(msg.chat.id, "⚠️ तरीका: <code>/rename Purana = Naya</code>", { parse_mode: 'HTML' });
+        if (parts.length < 2) {
+            return bot.sendMessage(msg.chat.id, "⚠️ <b>तरीका:</b>\n1. <code>/rename Purana = Naya Title</code>\n2. <code>/rename Purana = Naya Title (2026)</code>\n3. <code>/rename Purana = Naya Title | Poster_Image_URL</code>", { parse_mode: 'HTML' });
         }
 
         const oldTitle = parts[0].trim();
-        const newTitle = parts[1].trim();
+        let rightSide = parts[1].trim();
+
+        let customPoster = null;
+        if (rightSide.includes('|')) {
+            const splitData = rightSide.split('|');
+            rightSide = splitData[0].trim();
+            customPoster = splitData[1].trim();
+        }
+
+        let cleanNewTitle = rightSide.replace(/\((19\d\d|20\d\d)\)/g, '').trim();
+        let targetYear = (rightSide.match(/\b(19\d\d|20\d\d)\b/) || [])[0] || null;
 
         try {
             const oldMovie = await Movie.findOne({ title: new RegExp(`^${oldTitle}$`, 'i') });
@@ -342,11 +352,11 @@ module.exports = function setupBotHandlers(bot) {
                 return bot.sendMessage(msg.chat.id, `❌ "${oldTitle}" नाम से कोई मूवी नहीं मिली।`);
             }
 
-            const tmdbData = await fetchTMDBData(newTitle);
-            const finalTitle = tmdbData?.officialTitle || newTitle;
-            const poster = tmdbData?.poster || oldMovie.poster;
+            const tmdbData = await fetchTMDBData(cleanNewTitle, targetYear);
+            const finalTitle = tmdbData?.officialTitle || cleanNewTitle;
+            const poster = customPoster || tmdbData?.poster || oldMovie.poster;
             const rating = tmdbData?.rating || oldMovie.rating || '8.0';
-            const year = tmdbData?.year || oldMovie.year || '2026';
+            const year = targetYear || tmdbData?.year || oldMovie.year || '2026';
 
             let existingMovie = await Movie.findOne({ 
                 title: new RegExp(`^${finalTitle}$`, 'i'),
@@ -355,12 +365,9 @@ module.exports = function setupBotHandlers(bot) {
 
             if (existingMovie) {
                 existingMovie.files = existingMovie.files.concat(oldMovie.files || []);
-                if (poster && (!existingMovie.poster || existingMovie.poster.includes('placehold.co'))) {
-                    existingMovie.poster = poster;
-                }
+                if (poster) existingMovie.poster = poster;
                 existingMovie.updatedAt = new Date();
                 await existingMovie.save();
-
                 await Movie.deleteOne({ _id: oldMovie._id });
 
                 bot.sendMessage(
@@ -376,7 +383,7 @@ module.exports = function setupBotHandlers(bot) {
                 oldMovie.updatedAt = new Date();
                 await oldMovie.save();
 
-                bot.sendMessage(msg.chat.id, `✅ नाम बदलकर <b>"${oldMovie.title}"</b> कर दिया गया!`, { parse_mode: 'HTML' });
+                bot.sendMessage(msg.chat.id, `✅ <b>अपडेट सफल!</b>\n🎬 <b>टाइटल:</b> ${oldMovie.title}\n📅 <b>वर्ष:</b> ${oldMovie.year}`, { parse_mode: 'HTML' });
             }
         } catch (e) { 
             bot.sendMessage(msg.chat.id, "❌ एरर: " + e.message); 
