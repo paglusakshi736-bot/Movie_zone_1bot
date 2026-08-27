@@ -198,3 +198,94 @@ body {
 .join-check-btn { width: 100%; background: var(--primary-gradient); border: none; color: #fff; padding: 10px; border-radius: 8px; font-weight: 700; cursor: pointer; }
 
 .loader { grid-column: span 2; text-align: center; padding: 30px; color: var(--text-dim); font-size: 0.85rem; }
+/* 🔥 Trending Slider Styles */
+#trendingSection {
+    margin: 10px 0 16px 0;
+    padding: 0 4px;
+}
+
+.section-title {
+    font-size: 14px;
+    font-weight: 700;
+    color: #f1f5f9;
+    margin-bottom: 10px;
+    display: flex;
+    align-items: center;
+    gap: 6px;
+}
+
+.trending-scroll-container {
+    display: flex;
+    gap: 12px;
+    overflow-x: auto;
+    scroll-snap-type: x mandatory;
+    padding-bottom: 8px;
+    -webkit-overflow-scrolling: touch;
+}
+
+.trending-scroll-container::-webkit-scrollbar {
+    display: none;
+}
+
+.trending-card {
+    flex: 0 0 125px;
+    scroll-snap-align: start;
+    border-radius: 10px;
+    overflow: hidden;
+    background: #1e293b;
+    border: 1px solid #334155;
+    cursor: pointer;
+    transition: transform 0.2s ease;
+}
+
+.trending-card:active {
+    transform: scale(0.96);
+}
+
+.trending-poster-box {
+    position: relative;
+    width: 100%;
+    aspect-ratio: 2/3;
+    overflow: hidden;
+}
+
+.trending-poster-box img {
+    width: 100%;
+    height: 100%;
+    object-fit: cover;
+    display: block;
+}
+
+.trending-badge {
+    position: absolute;
+    top: 6px;
+    left: 6px;
+    background: linear-gradient(135deg, #e11d48, #be123c);
+    color: #fff;
+    font-size: 9px;
+    font-weight: 800;
+    padding: 2px 6px;
+    border-radius: 4px;
+    box-shadow: 0 2px 6px rgba(0,0,0,0.5);
+}
+
+.trending-info {
+    padding: 6px 8px;
+}
+
+.trending-title {
+    font-size: 11px;
+    font-weight: 600;
+    color: #f8fafc;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    margin-bottom: 3px;
+}
+
+.trending-meta {
+    font-size: 10px;
+    color: #fbbf24;
+    display: flex;
+    justify-content: space-between;
+}
