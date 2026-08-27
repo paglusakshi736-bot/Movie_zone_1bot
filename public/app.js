@@ -25,12 +25,39 @@ async function initApp() {
 }
 
 function getGridElement() {
-    return document.getElementById('movies-grid') || 
+    return document.getElementById('moviesContainer') || 
+           document.getElementById('movies-grid') || 
            document.getElementById('movieGrid') || 
-           document.getElementById('moviesContainer') || 
-           document.querySelector('.movie-grid') || 
-           document.querySelector('.movies-grid');
+           document.querySelector('.movies-grid') || 
+           document.querySelector('.movie-grid');
 }
+
+// 🏷️ कैटेगरी फ़िल्टर फ़ंक्शन (HTML onclick के लिए)
+window.applyCategoryFilter = function(category, element) {
+    document.querySelectorAll('.filter-chip').forEach(el => el.classList.remove('active'));
+    if (element) {
+        element.classList.add('active');
+    }
+
+    const catMap = {
+        'all': 'All',
+        'latest': 'Latest',
+        'watchlist': 'Watchlist',
+        'hollywood': 'Hollywood',
+        'hindi': 'Hindi',
+        'web series': 'Web Series',
+        'south': 'South'
+    };
+
+    currentCategory = catMap[category.toLowerCase()] || category;
+    loadMovies();
+};
+
+// 📅 साल फ़िल्टर फ़ंक्शन (HTML onchange के लिए)
+window.handleYearChange = function(yearValue) {
+    currentYear = (yearValue === 'all' || !yearValue) ? 'All' : yearValue;
+    loadMovies();
+};
 
 async function loadMovies() {
     const grid = getGridElement();
@@ -316,59 +343,6 @@ function closeModal() {
     if (modal) modal.style.display = 'none';
 }
 
-async function submitMovieRequest() {
-    const inputField = document.getElementById('requestInput') || document.querySelector('input[name="request"]');
-    const movieName = inputField ? inputField.value.trim() : '';
-
-    const user = tg?.initDataUnsafe?.user;
-
-    if (!user || !user.id) {
-        alert("⚠️ कृपया यह मिनी ऐप सीधे टेलीग्राम बॉट के अंदर से खोलें!");
-        return;
-    }
-
-    if (!movieName) {
-        alert("⚠️ कृपया मूवी का नाम दर्ज करें!");
-        return;
-    }
-
-    try {
-        const response = await fetch('/api/request', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({
-                userId: user.id,
-                username: user.username || '',
-                firstName: user.first_name || '',
-                movieName: movieName
-            })
-        });
-
-        const data = await response.json();
-
-        if (data.limitReached) {
-            const userChoice = confirm(
-                `⚠️ ${data.message}\n\nक्या आप अभी अपना इनवाइट लिंक दोस्तों के साथ शेयर करना चाहते हैं?`
-            );
-            if (userChoice) {
-                const shareUrl = `https://t.me/share/url?url=${encodeURIComponent(data.inviteLink)}&text=${encodeURIComponent('Join Movie Zone for latest movies and series!')}`;
-                if (tg && tg.openTelegramLink) {
-                    tg.openTelegramLink(shareUrl);
-                } else {
-                    window.open(shareUrl, '_blank');
-                }
-            }
-        } else if (data.success) {
-            alert(data.message);
-            if (inputField) inputField.value = '';
-        } else {
-            alert(data.message || "अनुरोध भेजने में विफल!");
-        }
-    } catch (e) {
-        alert("सर्वर से कनेक्ट करने में समस्या आई!");
-    }
-}
-
 document.addEventListener('DOMContentLoaded', () => {
     initApp();
 
@@ -379,35 +353,4 @@ document.addEventListener('DOMContentLoaded', () => {
             loadMovies();
         });
     }
-
-    // 🔘 कैटेगरी टैब स्विचिंग (Bollywood, South, Hollywood, Web Series)
-    const catButtons = document.querySelectorAll('.cat-btn, .category-btn, .tab-item');
-    catButtons.forEach(btn => {
-        btn.addEventListener('click', (e) => {
-            catButtons.forEach(b => b.classList.remove('active'));
-            const target = e.currentTarget;
-            target.classList.add('active');
-            
-            let cat = target.getAttribute('data-cat') || target.innerText.trim();
-            
-            // इमोजी हटाकर साफ़ नाम निकालना
-            cat = cat.replace(/[^\w\s]/gi, '').trim();
-
-            if (cat.toLowerCase().includes('bollywood') || cat.toLowerCase().includes('hindi')) {
-                currentCategory = 'Hindi';
-            } else if (cat.toLowerCase().includes('south')) {
-                currentCategory = 'South';
-            } else if (cat.toLowerCase().includes('hollywood')) {
-                currentCategory = 'Hollywood';
-            } else if (cat.toLowerCase().includes('web') || cat.toLowerCase().includes('series')) {
-                currentCategory = 'Web Series';
-            } else if (cat.toLowerCase().includes('latest')) {
-                currentCategory = 'Latest';
-            } else {
-                currentCategory = 'All';
-            }
-
-            loadMovies();
-        });
-    });
 });
