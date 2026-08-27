@@ -2,6 +2,9 @@ let botUsername = '';
 let currentCategory = 'All';
 let currentSearch = '';
 let currentYear = 'All';
+let currentPage = 1;
+let totalPages = 1;
+let isLoading = false;
 
 const tg = window.Telegram?.WebApp;
 if (tg) {
@@ -23,7 +26,7 @@ function populateYears() {
     yearSelect.innerHTML = html;
 }
 
-// 🔥 ट्रेंडिंग मूवीज स्लाइडर लोड करने का फ़ंक्शन
+// 🔥 ट्रेंडिंग मूवीज स्लाइडर
 async function loadTrendingMovies() {
     const section = document.getElementById('trendingSection');
     const slider = document.getElementById('trendingSlider');
@@ -34,7 +37,6 @@ async function loadTrendingMovies() {
         const data = await res.json();
         const movies = Array.isArray(data) ? data : (data.movies || []);
 
-        // 7.0+ रेटिंग या लेटेस्ट टॉप फिल्मों को ट्रेंडिंग में दिखाएँ
         const trendingList = movies.filter(m => parseFloat(m.rating || 0) >= 7.0 || m.isSeries).slice(0, 8);
 
         if (trendingList.length === 0) {
@@ -73,7 +75,7 @@ async function loadTrendingMovies() {
 
 async function initApp() {
     populateYears();
-    loadTrendingMovies(); // 👈 ट्रेंडिंग सेक्शन कॉल
+    loadTrendingMovies();
     try {
         const res = await fetch('/api/bot-info');
         const data = await res.json();
@@ -83,7 +85,7 @@ async function initApp() {
     } catch (e) {
         console.error('Failed to get bot info:', e);
     }
-    loadMovies();
+    loadMovies(true);
 }
 
 function getGridElement() {
@@ -94,7 +96,7 @@ function getGridElement() {
            document.querySelector('.movie-grid');
 }
 
-// 🏷️ कैटेगरी फ़िल्टर फ़ंक्शन
+// 🏷️ कैटेगरी फ़िल्टर
 window.applyCategoryFilter = function(category, element) {
     document.querySelectorAll('.filter-chip').forEach(el => el.classList.remove('active'));
     if (element) {
@@ -112,23 +114,39 @@ window.applyCategoryFilter = function(category, element) {
     };
 
     currentCategory = catMap[category.toLowerCase()] || category;
-    loadMovies();
+    currentPage = 1;
+    loadMovies(true);
 };
 
-// 📅 साल फ़िल्टर फ़ंक्शन
+// 📅 साल फ़िल्टर
 window.handleYearChange = function(yearValue) {
     currentYear = (yearValue === 'all' || !yearValue) ? 'All' : yearValue;
-    loadMovies();
+    currentPage = 1;
+    loadMovies(true);
 };
 
-async function loadMovies() {
+// 🎬 मूवीज लोड करना (Pagination / Load More)
+async function loadMovies(reset = false) {
+    if (isLoading) return;
+    isLoading = true;
+
     const grid = getGridElement();
-    if (!grid) return;
-    
-    grid.innerHTML = '<div style="color:#94a3b8;grid-column:1/-1;text-align:center;padding:30px;">लोड हो रहा है...</div>';
+    if (!grid) {
+        isLoading = false;
+        return;
+    }
+
+    if (reset) {
+        currentPage = 1;
+        grid.innerHTML = '<div style="color:#94a3b8;grid-column:1/-1;text-align:center;padding:30px;">लोड हो रहा है...</div>';
+    }
+
+    // Load More बटन का कंटेनर हटाना अगर पहले से हो
+    const oldBtn = document.getElementById('loadMoreBtnContainer');
+    if (oldBtn) oldBtn.remove();
 
     try {
-        let url = `/api/movies?category=${encodeURIComponent(currentCategory)}&search=${encodeURIComponent(currentSearch)}`;
+        let url = `/api/movies?category=${encodeURIComponent(currentCategory)}&search=${encodeURIComponent(currentSearch)}&page=${currentPage}&limit=30`;
         if (currentYear && currentYear !== 'All') {
             url += `&year=${encodeURIComponent(currentYear)}`;
         }
@@ -137,8 +155,11 @@ async function loadMovies() {
         const data = await res.json();
 
         const moviesList = Array.isArray(data) ? data : (data.movies || []);
+        totalPages = data.totalPages || 1;
 
-        if (moviesList.length === 0) {
+        if (reset) grid.innerHTML = '';
+
+        if (moviesList.length === 0 && currentPage === 1) {
             if (currentSearch) {
                 grid.innerHTML = `
                     <div style="grid-column:1/-1;text-align:center;padding:35px 15px;background:#1e293b;border-radius:12px;border:1px dashed #475569;margin:10px 0;">
@@ -154,10 +175,10 @@ async function loadMovies() {
             } else {
                 grid.innerHTML = '<div style="color:#94a3b8;grid-column:1/-1;text-align:center;padding:40px;">कोई मूवी/सीरीज़ नहीं मिली।</div>';
             }
+            isLoading = false;
             return;
         }
 
-        grid.innerHTML = '';
         moviesList.forEach(movie => {
             const card = document.createElement('div');
             card.className = 'movie-card';
@@ -170,7 +191,7 @@ async function loadMovies() {
                     <div class="badge-count" style="position:absolute;top:8px;right:8px;background:rgba(0,0,0,0.8);color:#f43f5e;font-size:11px;font-weight:700;padding:3px 7px;border-radius:6px;border:1px solid rgba(244,63,94,0.6);backdrop-filter:blur(4px);">${fileCount} Files</div>
                 </div>
                 <div class="movie-info" style="padding:10px;display:flex;flex-direction:column;flex-grow:1;justify-content:space-between;">
-                    <div class="movie-title" style="font-size:13px;font-weight:600;color:#f1f5f9;margin-bottom:6px;line-height:1.3;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden;">${movie.title}</div>
+                    <div class="movie-title" style="font-size:13px;font-weight:600;color:#f1f5f9;margin-bottom:6px;line-height:1.4;height:36px;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden;text-overflow:ellipsis;">${movie.title}</div>
                     <div class="movie-meta" style="display:flex;justify-content:space-between;font-size:11px;color:#94a3b8;margin-bottom:8px;">
                         <span>⭐ ${movie.rating || '8.0'}</span>
                         <span>📅 ${movie.year || '2026'}</span>
@@ -185,8 +206,28 @@ async function loadMovies() {
 
             grid.appendChild(card);
         });
+
+        // ➕ अगर और पेज बाकी हैं तो "और देखें (Load More)" बटन जोड़ें
+        if (currentPage < totalPages) {
+            const btnContainer = document.createElement('div');
+            btnContainer.id = 'loadMoreBtnContainer';
+            btnContainer.style.cssText = 'grid-column: 1 / -1; text-align: center; margin: 20px 0 30px 0;';
+            btnContainer.innerHTML = `
+                <button id="loadMoreBtn" style="background:#1e293b;color:#f1f5f9;border:1px solid #475569;padding:10px 24px;border-radius:20px;font-size:13px;font-weight:600;cursor:pointer;">
+                    🔄 और देखें (Load More)
+                </button>
+            `;
+            btnContainer.querySelector('#loadMoreBtn').addEventListener('click', () => {
+                currentPage++;
+                loadMovies(false);
+            });
+            grid.appendChild(btnContainer);
+        }
+
     } catch (err) {
         grid.innerHTML = '<div style="color:#ef4444;grid-column:1/-1;text-align:center;padding:20px;">डेटा लोड करने में एरर आया!</div>';
+    } finally {
+        isLoading = false;
     }
 }
 
@@ -412,7 +453,18 @@ document.addEventListener('DOMContentLoaded', () => {
     if (searchInput) {
         searchInput.addEventListener('input', (e) => {
             currentSearch = e.target.value.trim();
-            loadMovies();
+            currentPage = 1;
+            loadMovies(true);
         });
     }
+
+    // 📜 ऑटोमैटिक इन्फिनिट स्क्रॉल (जब यूज़र नीचे पहुँचेगा, अगला पेज अपने आप लोड होगा)
+    window.addEventListener('scroll', () => {
+        if ((window.innerHeight + window.scrollY) >= document.body.offsetHeight - 300) {
+            if (!isLoading && currentPage < totalPages) {
+                currentPage++;
+                loadMovies(false);
+            }
+        }
+    });
 });
