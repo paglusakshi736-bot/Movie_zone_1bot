@@ -11,7 +11,20 @@ if (tg) {
     } catch (e) {}
 }
 
+function populateYears() {
+    const yearSelect = document.getElementById('yearDropdown');
+    if (!yearSelect) return;
+    
+    let html = '<option value="all">📅 All Years</option>';
+    const thisYear = 2026;
+    for (let y = thisYear; y >= 2010; y--) {
+        html += `<option value="${y}">${y}</option>`;
+    }
+    yearSelect.innerHTML = html;
+}
+
 async function initApp() {
+    populateYears();
     try {
         const res = await fetch('/api/bot-info');
         const data = await res.json();
@@ -32,7 +45,7 @@ function getGridElement() {
            document.querySelector('.movie-grid');
 }
 
-// 🏷️ कैटेगरी फ़िल्टर फ़ंक्शन (HTML onclick के लिए)
+// 🏷️ कैटेगरी फ़िल्टर फ़ंक्शन
 window.applyCategoryFilter = function(category, element) {
     document.querySelectorAll('.filter-chip').forEach(el => el.classList.remove('active'));
     if (element) {
@@ -53,7 +66,7 @@ window.applyCategoryFilter = function(category, element) {
     loadMovies();
 };
 
-// 📅 साल फ़िल्टर फ़ंक्शन (HTML onchange के लिए)
+// 📅 साल फ़िल्टर फ़ंक्शन
 window.handleYearChange = function(yearValue) {
     currentYear = (yearValue === 'all' || !yearValue) ? 'All' : yearValue;
     loadMovies();
