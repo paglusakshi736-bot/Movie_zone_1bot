@@ -2,10 +2,30 @@ const axios = require('axios');
 
 function parseMediaInfo(rawText) {
     if (!rawText || typeof rawText !== 'string' || rawText.trim() === '') {
-        return { cleanTitle: '', label: 'Standard Quality', isSeries: false, isDubbed: false, detectedYear: null };
+        return { cleanTitle: 'Unnamed Media', label: 'Standard Quality', isSeries: false, isDubbed: false, detectedYear: null, isOther: true, needsFix: true };
     }
 
     let text = rawText.split('\n')[0].replace(/\.(mp4|mkv|avi|mov|zip|rar|\d{3})/gi, '');
+
+    // 🚩 रैंडम हेक्स कोड चेक (जैसे 209e7f3cc17c4745b9109...)
+    const isRandomHex = /^[a-f0-9]{14,}$/i.test(text.trim()) || /^[a-z0-9_-]{18,}$/i.test(text.trim());
+    if (isRandomHex) {
+        const shortCode = text.trim().substring(0, 10);
+        return {
+            cleanTitle: `Unknown_${shortCode}`,
+            label: 'Original File',
+            isSeries: false,
+            isDubbed: false,
+            detectedYear: '2026',
+            isOther: true,
+            needsFix: true
+        };
+    }
+
+    // 🚩 चेक करें क्या नाम में बहुत ज़्यादा कचरा/कटा-फटा टेक्स्ट है
+    const hasJunkWords = /(@\w+|https?:\/\/|www\.|t\.me|\[.*?\]|HEVC|x264|x265|web-dl|bluray|hdtv|AAC|Esub)/i.test(rawText);
+    const isLongMess = text.trim().length > 45;
+    const needsFix = hasJunkWords || isLongMess;
 
     let yearMatch = text.match(/\b(19\d\d|20\d\d)\b/);
     let detectedYear = yearMatch ? yearMatch[0] : null;
@@ -32,7 +52,7 @@ function parseMediaInfo(rawText) {
     if (audioInfo && !labelParts.includes(audioInfo)) labelParts.push(audioInfo);
     let label = labelParts.length > 0 ? labelParts.join(' - ') : 'Standard Quality';
 
-    // 🧹 Clean Up Company और बाकी नामों को सुरक्षित रखते हुए अनचाहे टैग्स हटाना
+    // 🧹 नाम की सफाई (ताकि एपिसोड 1, 2 और अलग-अलग क्वालिटीज़ का बेस नाम एक समान बने)
     let clean = text
         .replace(/\[.*?\]/g, ' ')
         .replace(/\(.*?\)/g, ' ')
@@ -50,13 +70,22 @@ function parseMediaInfo(rawText) {
         .replace(/\b(c\s*\d+|c\d+|v[0-9]|v\d+|hind|hin|eng|tam|tel|part\s*\d+|part\d+|line|lines)\b/gi, ' ')
         .replace(/\b(s\d+\s*e\d+|season\s*\d+|ep\s*\d+|episode\s*\d+|s\d+|e\d+)\b/gi, ' ')
         .replace(/\b(19\d\d|20\d\d)\b/g, ' ')
+        .replace(/\b\d{1,2}\s*$/, ' ') // अंत में लगा सिंगल नंबर (जैसे Sindoor 1, Sindoor 7) हटाना
         .replace(/[^\w\s]/gi, ' ')
         .replace(/\s+/g, ' ')
         .trim();
 
     clean = clean.split(' ').map(w => w.charAt(0).toUpperCase() + w.slice(1).toLowerCase()).join(' ');
 
-    return { cleanTitle: clean, label, isSeries, isDubbed, detectedYear: detectedYear || null };
+    return { 
+        cleanTitle: clean || 'Unnamed Media', 
+        label, 
+        isSeries, 
+        isDubbed, 
+        detectedYear: detectedYear || null,
+        isOther: false,
+        needsFix: needsFix
+    };
 }
 
 function formatBytes(bytes) {
@@ -68,7 +97,7 @@ function formatBytes(bytes) {
 
 async function fetchTMDBData(title, year = null, isSeries = false) {
     const TMDB_KEY = process.env.TMDB_API_KEY;
-    if (!TMDB_KEY || !title || title.trim().length < 2) return null;
+    if (!TMDB_KEY || !title || title.trim().length < 2 || title.startsWith('Unknown_') || title === 'Unnamed Media') return null;
     try {
         const endpoint = isSeries ? 'search/tv' : 'search/movie';
         const params = { api_key: TMDB_KEY, query: title.trim() };
