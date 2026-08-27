@@ -10,10 +10,10 @@ function parseMediaInfo(rawText) {
     let yearMatch = text.match(/\b(19\d\d|20\d\d)\b/);
     let detectedYear = yearMatch ? yearMatch[0] : null;
 
-    let isSeries = /(s\d+\s*e\d+|season\s*\d+|episode\s*\d+|ep\s*\d+|complete\s*series|web\s*series)/i.test(text);
+    let isSeries = /(s\d+\s*e\d+|season\s*\d+|episode\s*\d+|ep\s*\d+|complete\s*series|web\s*series|c\s*\d+|c\d+)/i.test(text);
     let isDubbed = /(hindi|dubbed|dual\s*audio)/i.test(text);
 
-    let epMatch = text.match(/(s\d+\s*e\d+|season\s*\d+\s*ep\s*\d+|season\s*\d+|ep\s*\d+|episode\s*\d+|part\s*\d+|part\d+)/i);
+    let epMatch = text.match(/(s\d+\s*e\d+|season\s*\d+\s*ep\s*\d+|season\s*\d+|ep\s*\d+|episode\s*\d+|c\s*\d+|c\d+|part\s*\d+|part\d+)/i);
     let episode = epMatch ? epMatch[0].toUpperCase() : '';
 
     let qualityMatch = text.match(/(2160p|4k|1080p|720p|480p|360p|240p|fhd|uhd|hd|sd)/i);
@@ -32,7 +32,7 @@ function parseMediaInfo(rawText) {
     if (audioInfo && !labelParts.includes(audioInfo)) labelParts.push(audioInfo);
     let label = labelParts.length > 0 ? labelParts.join(' - ') : 'Standard Quality';
 
-    // नाम साफ़ करने का सटीक क्रम (Blura और 10bi को पूरी तरह हटाने के लिए)
+    // 🧹 नाम को पूरी तरह साफ़ और अनचाहे टैग्स (Comple, Esubs, C 002 आदि) को हटाने का फ़िल्टर
     let clean = text
         .replace(/\[.*?\]/g, ' ')
         .replace(/\(.*?\)/g, ' ')
@@ -44,9 +44,10 @@ function parseMediaInfo(rawText) {
         .replace(/\b(10\s*bit|10bit|8\s*bit|8bit|hdr10|hdr|hevc|x265|x264|h265|h264|avc|remux|proper|hq)\b/gi, ' ')
         .replace(/\b(480p|720p|1080p|2160p|4k|fhd|uhd|hd|sd|360p|240p)\b/gi, ' ')
         .replace(/\b(ddp\s*5\s*1|5\s*1|2\s*0|aac\s*2\s*0|aac20|aac|dd\s*5\s*1|ddp20|ddp|dd|atmos|ac3)\b/gi, ' ')
-        .replace(/\b(hindi|english|telugu|tamil|punjabi|korean|dubbed|multi|dual\s*audio|org|original|full|esub|subs?|subtitles?)\b/gi, ' ')
-        .replace(/\b(south\s*movie|south|movie|complete\s*web\s*series|complete\s*series|web\s*series|series|combined|all\s*part|ds4k|ds|primex|prime|hotstar|zee5|sonyliv|jiocinema|clipmatezone|bulmoviee|bulmovie)\b/gi, ' ')
-        .replace(/\b(v[0-9]|v\d+|hind|hin|eng|tam|tel|part\s*\d+|part\d+|line|lines|clean)\b/gi, ' ')
+        .replace(/\b(hindi|english|telugu|tamil|punjabi|korean|dubbed|multi|dual\s*audio|org|original|full|esubs?|esub|subs?|subtitles?)\b/gi, ' ')
+        .replace(/\b(complete\s*web\s*series|complete\s*series|complet|comple|complete|web\s*series|series|combined|all\s*part|ds4k|ds|primex|prime|hotstar|zee5|sonyliv|jiocinema|clipmatezone|bulmoviee|bulmovie)\b/gi, ' ')
+        .replace(/\b(south\s*movie|south|movie|up\s*company)\b/gi, ' ')
+        .replace(/\b(c\s*\d+|c\d+|v[0-9]|v\d+|hind|hin|eng|tam|tel|part\s*\d+|part\d+|line|lines|clean)\b/gi, ' ')
         .replace(/\b(s\d+\s*e\d+|season\s*\d+|ep\s*\d+|episode\s*\d+|s\d+|e\d+)\b/gi, ' ')
         .replace(/\b(19\d\d|20\d\d)\b/g, ' ')
         .replace(/[^\w\s]/gi, ' ')
@@ -100,7 +101,8 @@ async function fetchTMDBData(title, year = null, isSeries = false) {
 
             if (!matched) matched = res.data.results[0];
 
-            const releaseYear = (matched.release_date || matched.first_air_date || '').split('-')[0];
+            const rawReleaseDate = matched.release_date || matched.first_air_date || null;
+            const releaseYear = rawReleaseDate ? rawReleaseDate.split('-')[0] : null;
             const officialTitle = matched.title || matched.name || title;
             const posterPath = matched.poster_path ? `https://image.tmdb.org/t/p/w500${matched.poster_path}` : null;
             const lang = (matched.original_language || '').toLowerCase();
@@ -117,6 +119,7 @@ async function fetchTMDBData(title, year = null, isSeries = false) {
                 poster: posterPath,
                 rating: matched.vote_average ? matched.vote_average.toFixed(1) : '8.0',
                 year: releaseYear || year || '2026',
+                releaseDate: rawReleaseDate,
                 category: tmdbCategory
             };
         }
