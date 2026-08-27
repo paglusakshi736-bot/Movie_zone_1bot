@@ -380,6 +380,7 @@ document.addEventListener('DOMContentLoaded', () => {
         });
     }
 
+    // 🔘 कैटेगरी टैब स्विचिंग (Bollywood, South, Hollywood, Web Series)
     const catButtons = document.querySelectorAll('.cat-btn, .category-btn, .tab-item');
     catButtons.forEach(btn => {
         btn.addEventListener('click', (e) => {
@@ -388,8 +389,24 @@ document.addEventListener('DOMContentLoaded', () => {
             target.classList.add('active');
             
             let cat = target.getAttribute('data-cat') || target.innerText.trim();
+            
+            // इमोजी हटाकर साफ़ नाम निकालना
             cat = cat.replace(/[^\w\s]/gi, '').trim();
-            currentCategory = cat || 'All';
+
+            if (cat.toLowerCase().includes('bollywood') || cat.toLowerCase().includes('hindi')) {
+                currentCategory = 'Hindi';
+            } else if (cat.toLowerCase().includes('south')) {
+                currentCategory = 'South';
+            } else if (cat.toLowerCase().includes('hollywood')) {
+                currentCategory = 'Hollywood';
+            } else if (cat.toLowerCase().includes('web') || cat.toLowerCase().includes('series')) {
+                currentCategory = 'Web Series';
+            } else if (cat.toLowerCase().includes('latest')) {
+                currentCategory = 'Latest';
+            } else {
+                currentCategory = 'All';
+            }
+
             loadMovies();
         });
     });
