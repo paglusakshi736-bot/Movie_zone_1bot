@@ -23,8 +23,57 @@ function populateYears() {
     yearSelect.innerHTML = html;
 }
 
+// 🔥 ट्रेंडिंग मूवीज स्लाइडर लोड करने का फ़ंक्शन
+async function loadTrendingMovies() {
+    const section = document.getElementById('trendingSection');
+    const slider = document.getElementById('trendingSlider');
+    if (!section || !slider) return;
+
+    try {
+        const res = await fetch('/api/movies?limit=15');
+        const data = await res.json();
+        const movies = Array.isArray(data) ? data : (data.movies || []);
+
+        // 7.0+ रेटिंग या लेटेस्ट टॉप फिल्मों को ट्रेंडिंग में दिखाएँ
+        const trendingList = movies.filter(m => parseFloat(m.rating || 0) >= 7.0 || m.isSeries).slice(0, 8);
+
+        if (trendingList.length === 0) {
+            section.style.display = 'none';
+            return;
+        }
+
+        section.style.display = 'block';
+        let html = '<div class="trending-scroll-container" style="display:flex;gap:12px;overflow-x:auto;padding-bottom:8px;">';
+
+        trendingList.forEach((movie, idx) => {
+            const posterSrc = movie.poster || 'https://placehold.co/200x300/1e293b/ffffff?text=Poster';
+            html += `
+                <div class="trending-card" style="flex:0 0 120px;border-radius:10px;overflow:hidden;background:#1e293b;border:1px solid #334155;cursor:pointer;" onclick='openDownloadModal(${JSON.stringify(movie)})'>
+                    <div style="position:relative;width:100%;aspect-ratio:2/3;overflow:hidden;">
+                        <img src="${posterSrc}" alt="${movie.title}" style="width:100%;height:100%;object-fit:cover;display:block;" loading="lazy">
+                        <div style="position:absolute;top:6px;left:6px;background:linear-gradient(135deg,#e11d48,#be123c);color:#fff;font-size:9px;font-weight:800;padding:2px 6px;border-radius:4px;">TOP #${idx + 1}</div>
+                    </div>
+                    <div style="padding:6px 8px;">
+                        <div style="font-size:11px;font-weight:600;color:#f8fafc;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;margin-bottom:3px;">${movie.title}</div>
+                        <div style="font-size:10px;color:#fbbf24;display:flex;justify-content:space-between;">
+                            <span>⭐ ${movie.rating || '8.0'}</span>
+                            <span style="color:#94a3b8;">${movie.year || '2026'}</span>
+                        </div>
+                    </div>
+                </div>
+            `;
+        });
+
+        html += '</div>';
+        slider.innerHTML = html;
+    } catch (err) {
+        section.style.display = 'none';
+    }
+}
+
 async function initApp() {
     populateYears();
+    loadTrendingMovies(); // 👈 ट्रेंडिंग सेक्शन कॉल
     try {
         const res = await fetch('/api/bot-info');
         const data = await res.json();
