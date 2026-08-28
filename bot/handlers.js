@@ -5,8 +5,12 @@ const ADMIN_ID = process.env.ADMIN_ID;
 const adminDeleteSessions = {};
 const adminBroadcastSessions = {};
 const PAGE_LIMIT = 8;
+
+// ⚡ बल्क अपलोड कतार और काउंटर
 let uploadQueue = Promise.resolve();
 const adminFileQueue = {};
+let bulkProcessedCount = 0;
+let bulkNotificationTimer = null;
 
 async function processNextPendingFile(bot, chatId) {
     if (!adminFileQueue[chatId] || adminFileQueue[chatId].length === 0) return;
@@ -85,10 +89,14 @@ async function renderDeletePanel(bot, chatId, messageId = null, page = 1, search
 
 // 📢 स्मार्ट ब्रॉडकास्ट डाइजेस्ट पैनल रेंडरर
 async function renderBroadcastDigest(bot, chatId, messageId = null) {
-    const pendingMovies = await Movie.find({ broadcastStatus: 'pending' }).sort({ updatedAt: -1 }).limit(10);
+    let pendingMovies = await Movie.find({ broadcastStatus: 'pending' }).sort({ updatedAt: -1 }).limit(10);
 
     if (pendingMovies.length === 0) {
-        const emptyText = "✅ <b>कोई पेंडिंग ब्रॉडकास्ट नहीं है!</b>\n(30 दिन के अंदर रिलीज़ हुई या 9.0+ रेटिंग वाली नई मूवीज़ यहाँ दिखेंगी)";
+        pendingMovies = await Movie.find().sort({ updatedAt: -1 }).limit(10);
+    }
+
+    if (pendingMovies.length === 0) {
+        const emptyText = "❌ <b>डेटाबेस पूरी तरह खाली है!</b>\nपहले कुछ मूवीज़/सीरीज़ अपलोड करें।";
         if (messageId) return bot.editMessageText(emptyText, { chat_id: chatId, message_id: messageId, parse_mode: 'HTML' });
         return bot.sendMessage(chatId, emptyText, { parse_mode: 'HTML' });
     }
@@ -112,9 +120,8 @@ async function renderBroadcastDigest(bot, chatId, messageId = null) {
         { text: `❌ Dismiss All`, callback_data: `b_dismiss_all` }
     ]);
 
-    let text = `📊 <b>दैनिक स्मार्ट ब्रॉडकास्ट डाइजेस्ट</b>\n\n` +
-               `फ़िल्टर शर्तें: <i>रिलीज़ ≤ 30 दिन या रेटिंग ≥ 9.0</i>\n` +
-               `पेंडिंग मूवीज़: <b>${pendingMovies.length}</b>\n\n` +
+    let text = `📊 <b>स्मार्ट ब्रॉडकास्ट पैनल</b>\n\n` +
+               `उपलब्ध मूवीज़: <b>${pendingMovies.length}</b>\n\n` +
                `मूवीज़ पर क्लिक करके सेलेक्ट/अनसेलेक्ट करें, फिर <b>Send Selected</b> दबाएं:`;
 
     if (messageId) {
@@ -319,6 +326,7 @@ module.exports = function setupBotHandlers(bot) {
         if (!isAdmin(msg.from.id)) return;
         try {
             const result = await Movie.deleteMany({});
+            bulkProcessedCount = 0;
             bot.sendMessage(msg.chat.id, `🗑️ <b>डेटाबेस पूरा साफ़ हो गया!</b>\nकुल <b>${result.deletedCount}</b> मूवीज़ हटा दी गईं।`, { parse_mode: 'HTML' });
         } catch (e) { 
             bot.sendMessage(msg.chat.id, "❌ एरर: " + e.message); 
@@ -394,7 +402,10 @@ module.exports = function setupBotHandlers(bot) {
 
     // 📢 ब्रॉडकास्ट डाइजेस्ट कमांड
     bot.onText(/\/broadcast_digest/, async (msg) => {
-        if (!isAdmin(msg.from.id)) return;
+        const userId = msg.from.id.toString();
+        if (!isAdmin(userId)) {
+            return bot.sendMessage(msg.chat.id, `❌ आपकी ID (<code>${userId}</code>) एडमिन लिस्ट में नहीं है!`, { parse_mode: 'HTML' });
+        }
         adminBroadcastSessions[msg.chat.id] = null;
         await renderBroadcastDigest(bot, msg.chat.id);
     });
@@ -618,6 +629,7 @@ module.exports = function setupBotHandlers(bot) {
         }
     });
 
+    // ⚡ साइलेंट व तेज़ डेटाबेस सेवर (हर 100 फ़ाइल्स पर ऑटो-नोटिफिकेशन के साथ)
     async function saveMovieToDB(bot, chatId, titleToUse, fileData) {
         const { fileId, fileType, fileSize, thumbFileId, label, isSeries, isDubbed, detectedYear, isOther } = fileData;
         try {
@@ -634,18 +646,14 @@ module.exports = function setupBotHandlers(bot) {
                     if (fileObj && fileObj.file_path) {
                         poster = `https://api.telegram.org/file/bot${bot.token}/${fileObj.file_path}`;
                     }
-                } catch (e) {
-                    console.error('[Telegram Thumb Fetch Error]:', e.message);
-                }
+                } catch (e) {}
             }
 
-            // 📁 अगर रैंडम कोड/बिना नाम वाली फाइल है तो Others कैटेगरी में डालें
             let finalCategory = isOther ? 'Others' : (tmdbData?.category || (isSeries ? 'Web Series' : 'Movie'));
             if (!isSeries && isDubbed && finalCategory !== 'Hindi' && !isOther) {
                 finalCategory = 'Hindi';
             }
 
-            // 🎯 स्मार्ट फ़िल्टरिंग: 30 दिन या 9.0+ रेटिंग
             let isEligible = false;
             if (parseFloat(rating) >= 9.0) {
                 isEligible = true;
@@ -678,12 +686,7 @@ module.exports = function setupBotHandlers(bot) {
                 movie.updatedAt = new Date();
                 await movie.save();
 
-                await bot.sendMessage(
-                    chatId,
-                    `✅ <b>मौजूदा कार्ड में नया भाग/क्वालिटी जुड़ गया! (Auto-Merged)</b>\n\n🎬 <b>मूवी:</b> ${movie.title}\n📦 <b>क्वालिटी:</b> ${finalLabel}\n📂 <b>कुल फाइल्स:</b> ${movie.files.length}` +
-                    (isEligible ? `\n📢 <i>(स्मार्ट ब्रॉडकास्ट कतार में जोड़ी गई)</i>` : ''),
-                    { parse_mode: 'HTML' }
-                );
+                console.log(`[Auto-Merged]: ${movie.title} -> ${finalLabel}`);
             } else {
                 movie = new Movie({
                     title: finalMovieTitle,
@@ -699,15 +702,35 @@ module.exports = function setupBotHandlers(bot) {
                 });
                 await movie.save();
 
-                await bot.sendMessage(
-                    chatId,
-                    `✅ <b>नया कार्ड बना!</b>\n\n🎬 <b>मूवी:</b> ${finalMovieTitle}\n🏷️ <b>कैटेगरी:</b> ${finalCategory}\n📦 <b>क्वालिटी:</b> ${finalLabel}\n⭐ <b>रेटिंग:</b> ${rating}\n📅 <b>साल:</b> ${year}` +
-                    (isEligible ? `\n📢 <i>(स्मार्ट ब्रॉडकास्ट कतार में जोड़ी गई)</i>` : ''),
-                    { parse_mode: 'HTML' }
-                );
+                console.log(`[Created]: ${finalMovieTitle} -> ${finalCategory}`);
             }
+
+            // 📊 100 फ़ाइल्स काउंटर
+            bulkProcessedCount++;
+            if (bulkProcessedCount % 100 === 0) {
+                bot.sendMessage(
+                    chatId,
+                    `📊 <b>[बल्क अपलोड स्टेटस]:</b> कुल <b>${bulkProcessedCount}</b> फ़ाइलें सफलतापूर्वक प्रोसेस और सेव हो चुकी हैं!`,
+                    { parse_mode: 'HTML' }
+                ).catch(() => {});
+            }
+
+            // जब कतार पूरी हो जाएगी (5 सेकंड तक कोई नई फ़ाइल नहीं आएगी), तो फ़ाइनल समरी भेजेगा
+            if (bulkNotificationTimer) clearTimeout(bulkNotificationTimer);
+            bulkNotificationTimer = setTimeout(async () => {
+                try {
+                    const totalMovies = await Movie.countDocuments();
+                    bot.sendMessage(
+                        chatId,
+                        `🎉 <b>बल्क अपलोड पूरा हुआ!</b>\n\n📥 हाल में प्रोसेस की गईं फ़ाइलें: <b>${bulkProcessedCount}</b>\n🎬 डेटाबेस में कुल कार्ड्स: <b>${totalMovies}</b>`,
+                        { parse_mode: 'HTML' }
+                    );
+                    bulkProcessedCount = 0;
+                } catch (e) {}
+            }, 5000);
+
         } catch (err) {
-            await bot.sendMessage(chatId, "❌ एरर: " + err.message);
+            console.error('[DB Save Error]:', err.message);
         }
     }
 
@@ -768,6 +791,7 @@ module.exports = function setupBotHandlers(bot) {
             }
 
             await saveMovieToDB(bot, msg.chat.id, cleanTitle, fileData);
+            await new Promise(r => setTimeout(r, 120)); // माइक्रो सेफ़्टी डीले
         });
     });
 };
