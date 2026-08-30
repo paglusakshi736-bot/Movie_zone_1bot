@@ -5,6 +5,7 @@ let currentYear = 'All';
 let currentPage = 1;
 let totalPages = 1;
 let isLoading = false;
+let userIsAdmin = false;
 
 const tg = window.Telegram?.WebApp;
 if (tg) {
@@ -12,6 +13,10 @@ if (tg) {
         tg.ready();
         tg.expand();
     } catch (e) {}
+}
+
+function getUserId() {
+    return tg?.initDataUnsafe?.user?.id || '';
 }
 
 function populateYears() {
@@ -33,11 +38,11 @@ async function loadTrendingMovies() {
     if (!section || !slider) return;
 
     try {
-        const res = await fetch('/api/movies?limit=15');
+        const res = await fetch(`/api/movies?limit=15&userId=${getUserId()}`);
         const data = await res.json();
         const movies = Array.isArray(data) ? data : (data.movies || []);
 
-        const trendingList = movies.filter(m => parseFloat(m.rating || 0) >= 7.0 || m.isSeries).slice(0, 8);
+        const trendingList = movies.filter(m => (parseFloat(m.rating || 0) >= 7.0 || m.isSeries) && !m.title.startsWith('Unknown_')).slice(0, 8);
 
         if (trendingList.length === 0) {
             section.style.display = 'none';
@@ -48,11 +53,12 @@ async function loadTrendingMovies() {
         let html = '<div class="trending-scroll-container" style="display:flex;gap:12px;overflow-x:auto;padding-bottom:8px;">';
 
         trendingList.forEach((movie, idx) => {
-            const posterSrc = movie.poster || 'https://placehold.co/200x300/1e293b/ffffff?text=Poster';
+            const fallbackPoster = `https://placehold.co/200x300/1e293b/ffffff?text=${encodeURIComponent(movie.title.substring(0, 15))}`;
+            const posterSrc = movie.poster || fallbackPoster;
             html += `
-                <div class="trending-card" style="flex:0 0 120px;border-radius:10px;overflow:hidden;background:#1e293b;border:1px solid #334155;cursor:pointer;" onclick='openDownloadModal(${JSON.stringify(movie)})'>
+                <div class="trending-card" style="flex:0 0 120px;border-radius:10px;overflow:hidden;background:#1e293b;border:1px solid #334155;cursor:pointer;" onclick='openDownloadModal(${JSON.stringify(movie).replace(/'/g, "&apos;")})'>
                     <div style="position:relative;width:100%;aspect-ratio:2/3;overflow:hidden;">
-                        <img src="${posterSrc}" alt="${movie.title}" style="width:100%;height:100%;object-fit:cover;display:block;" loading="lazy">
+                        <img src="${posterSrc}" alt="${movie.title}" onerror="this.onerror=null;this.src='${fallbackPoster}';" style="width:100%;height:100%;object-fit:cover;display:block;" loading="lazy">
                         <div style="position:absolute;top:6px;left:6px;background:linear-gradient(135deg,#e11d48,#be123c);color:#fff;font-size:9px;font-weight:800;padding:2px 6px;border-radius:4px;">TOP #${idx + 1}</div>
                     </div>
                     <div style="padding:6px 8px;">
@@ -112,7 +118,8 @@ window.applyCategoryFilter = function(category, element) {
         'web series': 'Web Series',
         'south': 'South',
         'others': 'Others',
-        'needs_fix': 'needs_fix'
+        'needs_fix': 'needs_fix',
+        'fix names': 'needs_fix'
     };
 
     currentCategory = catMap[category.toLowerCase()] || category;
@@ -127,7 +134,7 @@ window.handleYearChange = function(yearValue) {
     loadMovies(true);
 };
 
-// 🎬 मूवीज लोड करना (Pagination / Load More)
+// 🎬 मूवीज लोड करना
 async function loadMovies(reset = false) {
     if (isLoading) return;
     isLoading = true;
@@ -147,13 +154,23 @@ async function loadMovies(reset = false) {
     if (oldBtn) oldBtn.remove();
 
     try {
-        let url = `/api/movies?category=${encodeURIComponent(currentCategory)}&search=${encodeURIComponent(currentSearch)}&page=${currentPage}&limit=30`;
+        const uid = getUserId();
+        let url = `/api/movies?category=${encodeURIComponent(currentCategory)}&search=${encodeURIComponent(currentSearch)}&page=${currentPage}&limit=30&userId=${uid}`;
         if (currentYear && currentYear !== 'All') {
             url += `&year=${encodeURIComponent(currentYear)}`;
         }
 
         const res = await fetch(url);
         const data = await res.json();
+
+        userIsAdmin = data.isAdmin || false;
+
+        // 🔒 एडमिन चेक: Others टैब बटन केवल एडमिन को दिखाएं
+        const othersTabBtn = document.querySelector('[data-category="Others"]') || 
+                             Array.from(document.querySelectorAll('.filter-chip')).find(el => el.innerText.includes('Others'));
+        if (othersTabBtn) {
+            othersTabBtn.style.display = userIsAdmin ? 'inline-block' : 'none';
+        }
 
         const moviesList = Array.isArray(data) ? data : (data.movies || []);
         totalPages = data.totalPages || 1;
@@ -186,12 +203,13 @@ async function loadMovies(reset = false) {
         moviesList.forEach(movie => {
             const card = document.createElement('div');
             card.className = 'movie-card';
-            const posterSrc = movie.poster || 'https://placehold.co/300x450/1e293b/ffffff?text=No+Poster';
+            const fallbackPoster = `https://placehold.co/300x450/1e293b/ffffff?text=${encodeURIComponent(movie.title.substring(0, 15))}`;
+            const posterSrc = movie.poster || fallbackPoster;
             const fileCount = movie.files ? movie.files.length : 1;
 
             card.innerHTML = `
                 <div class="poster-container" style="position:relative;width:100%;aspect-ratio:3/4;background:#1e293b;overflow:hidden;border-radius:10px 10px 0 0;">
-                    <img src="${posterSrc}" alt="${movie.title}" style="width:100%;height:100%;object-fit:cover;display:block;" loading="lazy">
+                    <img src="${posterSrc}" alt="${movie.title}" onerror="this.onerror=null;this.src='${fallbackPoster}';" style="width:100%;height:100%;object-fit:cover;display:block;" loading="lazy">
                     <div class="badge-count" style="position:absolute;top:8px;right:8px;background:rgba(0,0,0,0.8);color:#f43f5e;font-size:11px;font-weight:700;padding:3px 7px;border-radius:6px;border:1px solid rgba(244,63,94,0.6);backdrop-filter:blur(4px);">${fileCount} Files</div>
                 </div>
                 <div class="movie-info" style="padding:10px;display:flex;flex-direction:column;flex-grow:1;justify-content:space-between;">
@@ -211,7 +229,6 @@ async function loadMovies(reset = false) {
             grid.appendChild(card);
         });
 
-        // ➕ अगर और पेज बाकी हैं तो "और देखें (Load More)" बटन जोड़ें
         if (currentPage < totalPages) {
             const btnContainer = document.createElement('div');
             btnContainer.id = 'loadMoreBtnContainer';
@@ -462,7 +479,6 @@ document.addEventListener('DOMContentLoaded', () => {
         });
     }
 
-    // 📜 ऑटोमैटिक इन्फिनिट स्क्रॉल
     window.addEventListener('scroll', () => {
         if ((window.innerHeight + window.scrollY) >= document.body.offsetHeight - 300) {
             if (!isLoading && currentPage < totalPages) {
