@@ -2,6 +2,10 @@ const { User, Movie, Config } = require('../models');
 const { parseMediaInfo, formatBytes, fetchTMDBData } = require('./cleaner');
 
 const ADMIN_ID = process.env.ADMIN_ID;
+const UPDATE_CHANNEL_ID = '@Moviezoneupdate';
+const UPDATE_CHANNEL_LINK = 'https://t.me/Moviezoneupdate';
+const DISCUSS_GROUP_LINK = 'https://t.me/+DBD_fVL-Z5QwZWFl';
+
 const adminDeleteSessions = {};
 const adminBroadcastSessions = {};
 const PAGE_LIMIT = 8;
@@ -132,7 +136,7 @@ async function renderBroadcastDigest(bot, chatId, messageId = null) {
 }
 
 module.exports = function setupBotHandlers(bot) {
-    // 1. Start Command with Referral Tracking
+    // 1. Start Command with Referral Tracking & Channel/Group Buttons
     bot.onText(/\/start(?:\s+(.+))?/, async (msg, match) => {
         try {
             const currentUserId = msg.from.id.toString();
@@ -177,8 +181,13 @@ module.exports = function setupBotHandlers(bot) {
                 const deleteMinutes = (timerConfig && timerConfig.value) ? parseInt(timerConfig.value) : 10;
 
                 const sentMsg = await bot.sendDocument(msg.chat.id, fileId, {
-                    caption: `🎬 <b>आपकी अनलॉक की गई फ़ाइल!</b>\n\n⚠️ <i>यह फ़ाइल ${deleteMinutes} मिनट में डिलीट हो जाएगी, इसे तुरंत Saved Messages में फॉरवर्ड कर लें।</i>`,
-                    parse_mode: 'HTML'
+                    caption: `🎬 <b>आपकी अनलॉक की गई फ़ाइल!</b>\n\n⚠️ <i>यह फ़ाइल ${deleteMinutes} मिनट में डिलीट हो जाएगी, इसे तुरंत Saved Messages में फॉरवर्ड कर लें।</i>\n\n💬 <i>फ़ाइल डाउनलोड या प्ले करने में कोई समस्या है तो ग्रुप में बताएं।</i>`,
+                    parse_mode: 'HTML',
+                    reply_markup: {
+                        inline_keyboard: [
+                            [{ text: '💬 Discussion Group', url: DISCUSS_GROUP_LINK }]
+                        ]
+                    }
                 });
 
                 setTimeout(async () => {
@@ -197,7 +206,11 @@ module.exports = function setupBotHandlers(bot) {
                 parse_mode: 'HTML',
                 reply_markup: {
                     inline_keyboard: [
-                        [{ text: '🚀 Open Movie Mini App', web_app: { url: appUrl } }]
+                        [{ text: '🚀 Open Movie Mini App', web_app: { url: appUrl } }],
+                        [
+                            { text: '📢 Update Channel', url: UPDATE_CHANNEL_LINK },
+                            { text: '💬 Discussion Group', url: DISCUSS_GROUP_LINK }
+                        ]
                     ]
                 }
             });
@@ -301,8 +314,16 @@ module.exports = function setupBotHandlers(bot) {
             bot.sendMessage(
                 msg.chat.id,
                 `✅ आपकी रिक्वेस्ट <b>"${reqMovie}"</b> एडमिन को भेज दी गई है!\n\n` +
-                (hasUsedDailyFree ? `🎟️ <i>(1 रेफरल क्रेडिट इस्तेमाल हुआ। शेष क्रेडिट: ${user.availableCredits})</i>` : `🎁 <i>(दैनिक फ़्री रिक्वेस्ट इस्तेमाल हुई)</i>`),
-                { parse_mode: 'HTML' }
+                (hasUsedDailyFree ? `🎟️ <i>(1 रेफरल क्रेडिट इस्तेमाल हुआ। शेष क्रेडिट: ${user.availableCredits})</i>` : `🎁 <i>(दैनिक फ़्री रिक्वेस्ट इस्तेमाल हुई)</i>`) +
+                `\n\n📢 <i>मूवी अपलोड होते ही सबसे पहले हमारे <a href="${UPDATE_CHANNEL_LINK}">Update Channel</a> में नोटिफिकेशन आएगा!</i>`,
+                { 
+                    parse_mode: 'HTML',
+                    reply_markup: {
+                        inline_keyboard: [
+                            [{ text: '📢 Check Update Channel', url: UPDATE_CHANNEL_LINK }]
+                        ]
+                    }
+                }
             );
         } catch (e) {
             bot.sendMessage(msg.chat.id, "❌ एरर: " + e.message);
@@ -415,7 +436,16 @@ module.exports = function setupBotHandlers(bot) {
         const textToSend = match[1];
         try {
             const users = await User.find({ isBlocked: { $ne: true } });
-            bot.sendMessage(msg.chat.id, `📢 ${users.length} यूज़र्स को ब्रॉडकास्ट भेजा जा रहा है...`);
+            bot.sendMessage(msg.chat.id, `📢 ${users.length} यूज़र्स और अपडेट चैनल को ब्रॉडकास्ट भेजा जा रहा है...`);
+            
+            // 1. सबसे पहले Update Channel में पोस्ट करें
+            try {
+                await bot.sendMessage(UPDATE_CHANNEL_ID, textToSend, { parse_mode: 'HTML' });
+            } catch (err) {
+                console.error('[Update Channel Post Error]:', err.message);
+            }
+
+            // 2. फिर सभी यूज़र्स को भेजें
             let success = 0;
             for (const u of users) {
                 try {
@@ -428,7 +458,7 @@ module.exports = function setupBotHandlers(bot) {
                     }
                 }
             }
-            bot.sendMessage(msg.chat.id, `✅ ब्रॉडकास्ट पूरा हुआ! सफलता: ${success}/${users.length}`);
+            bot.sendMessage(msg.chat.id, `✅ ब्रॉडकास्ट पूरा हुआ!\n📢 चैनल में पोस्ट हो गया।\n👥 यूज़र्स को भेजा गया: ${success}/${users.length}`);
         } catch (e) { bot.sendMessage(msg.chat.id, "❌ एरर: " + e.message); }
     });
 
@@ -529,10 +559,19 @@ module.exports = function setupBotHandlers(bot) {
 
             const reply_markup = {
                 inline_keyboard: [
-                    [{ text: '🚀 Open in Movie Mini App', web_app: { url: appUrl } }]
+                    [{ text: '🚀 Open in Movie Mini App', web_app: { url: appUrl } }],
+                    [{ text: '💬 Join Discussion', url: DISCUSS_GROUP_LINK }]
                 ]
             };
 
+            // 1. सबसे पहले Update Channel में पोस्ट करें
+            try {
+                await bot.sendMessage(UPDATE_CHANNEL_ID, broadcastText, { parse_mode: 'HTML', reply_markup });
+            } catch (err) {
+                console.error('[Update Channel Broadcast Error]:', err.message);
+            }
+
+            // 2. फिर सभी यूज़र्स को भेजें
             const users = await User.find({ isBlocked: { $ne: true } });
             let success = 0;
 
@@ -551,7 +590,7 @@ module.exports = function setupBotHandlers(bot) {
             await Movie.updateMany({ _id: { $in: session.selected } }, { broadcastStatus: 'sent' });
             delete adminBroadcastSessions[chatId];
 
-            await bot.sendMessage(chatId, `✅ <b>ब्रॉडकास्ट पूरा हुआ!</b>\nसफलतापूर्वक भेजा गया: <b>${success}/${users.length} यूज़र्स</b>`, { parse_mode: 'HTML' });
+            await bot.sendMessage(chatId, `✅ <b>ब्रॉडकास्ट पूरा हुआ!</b>\n📢 <b>@Moviezoneupdate</b> में पोस्ट सफल!\n👥 यूज़र्स को भेजा गया: <b>${success}/${users.length}</b>`, { parse_mode: 'HTML' });
         }
         // 📩 मूवी रिक्वेस्ट एक्शन्स
         else if (data.startsWith('req_done_')) {
@@ -629,7 +668,7 @@ module.exports = function setupBotHandlers(bot) {
         }
     });
 
-    // ⚡ साइलेंट व तेज़ डेटाबेस सेवर (हर 100 फ़ाइल्स पर ऑटो-नोटिफिकेशन के साथ)
+    // ⚡ साइलेंट व तेज़ डेटाबेस सेवर
     async function saveMovieToDB(bot, chatId, titleToUse, fileData) {
         const { fileId, fileType, fileSize, thumbFileId, label, isSeries, isDubbed, detectedYear, isOther } = fileData;
         try {
@@ -705,7 +744,6 @@ module.exports = function setupBotHandlers(bot) {
                 console.log(`[Created]: ${finalMovieTitle} -> ${finalCategory}`);
             }
 
-            // 📊 100 फ़ाइल्स काउंटर
             bulkProcessedCount++;
             if (bulkProcessedCount % 100 === 0) {
                 bot.sendMessage(
@@ -715,7 +753,6 @@ module.exports = function setupBotHandlers(bot) {
                 ).catch(() => {});
             }
 
-            // जब कतार पूरी हो जाएगी (5 सेकंड तक कोई नई फ़ाइल नहीं आएगी), तो फ़ाइनल समरी भेजेगा
             if (bulkNotificationTimer) clearTimeout(bulkNotificationTimer);
             bulkNotificationTimer = setTimeout(async () => {
                 try {
@@ -735,6 +772,33 @@ module.exports = function setupBotHandlers(bot) {
     }
 
     bot.on('message', async (msg) => {
+        // 💬 ग्रुप में किसी के मूवी नाम पूछने पर ऑटो-गाइड
+        if (msg.chat && (msg.chat.type === 'group' || msg.chat.type === 'supergroup')) {
+            if (msg.text && !msg.text.startsWith('/')) {
+                const queryText = msg.text.trim();
+                if (queryText.length > 3 && !msg.from.is_bot) {
+                    const matchedMovie = await Movie.findOne({ title: new RegExp(queryText, 'i') });
+                    if (matchedMovie) {
+                        const appUrl = process.env.RENDER_EXTERNAL_URL || 'https://movie-zone-1bot.onrender.com';
+                        bot.sendMessage(
+                            msg.chat.id,
+                            `🍿 <b>"${matchedMovie.title}"</b> हमारे स्टोर में उपलब्ध है!\n\n👇 नीचे क्लिक करके तुरंत देखें:`,
+                            {
+                                reply_to_message_id: msg.message_id,
+                                parse_mode: 'HTML',
+                                reply_markup: {
+                                    inline_keyboard: [
+                                        [{ text: '🚀 Open Mini App', web_app: { url: appUrl } }]
+                                    ]
+                                }
+                            }
+                        ).catch(() => {});
+                    }
+                }
+            }
+            return;
+        }
+
         const userId = msg.from ? msg.from.id.toString() : '';
         if (!isAdmin(userId)) return;
 
