@@ -18,11 +18,10 @@ function parseMediaInfo(rawText) {
             isDubbed: false,
             detectedYear: '2026',
             isOther: true,
-            needsFix: true
+            needsFix: false
         };
     }
 
-    // 🚩 चेक करें क्या नाम में बहुत ज़्यादा कचरा/कटा-फटा टेक्स्ट है
     const hasJunkWords = /(@\w+|https?:\/\/|www\.|t\.me|\[.*?\]|HEVC|x264|x265|web-dl|bluray|hdtv|AAC|Esub)/i.test(rawText);
     const isLongMess = text.trim().length > 45;
     const needsFix = hasJunkWords || isLongMess;
@@ -52,7 +51,7 @@ function parseMediaInfo(rawText) {
     if (audioInfo && !labelParts.includes(audioInfo)) labelParts.push(audioInfo);
     let label = labelParts.length > 0 ? labelParts.join(' - ') : 'Standard Quality';
 
-    // 🧹 नाम की सफाई (ताकि एपिसोड 1, 2 और अलग-अलग क्वालिटीज़ का बेस नाम एक समान बने)
+    // 🧹 नाम की सफाई
     let clean = text
         .replace(/\[.*?\]/g, ' ')
         .replace(/\(.*?\)/g, ' ')
@@ -70,7 +69,7 @@ function parseMediaInfo(rawText) {
         .replace(/\b(c\s*\d+|c\d+|v[0-9]|v\d+|hind|hin|eng|tam|tel|part\s*\d+|part\d+|line|lines)\b/gi, ' ')
         .replace(/\b(s\d+\s*e\d+|season\s*\d+|ep\s*\d+|episode\s*\d+|s\d+|e\d+)\b/gi, ' ')
         .replace(/\b(19\d\d|20\d\d)\b/g, ' ')
-        .replace(/\b\d{1,2}\s*$/, ' ') // अंत में लगा सिंगल नंबर (जैसे Sindoor 1, Sindoor 7) हटाना
+        .replace(/\b\d{1,2}\s*$/, ' ')
         .replace(/[^\w\s]/gi, ' ')
         .replace(/\s+/g, ' ')
         .trim();
