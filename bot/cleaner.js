@@ -7,7 +7,7 @@ function parseMediaInfo(rawText) {
 
     let text = rawText.split('\n')[0].replace(/\.(mp4|mkv|avi|mov|zip|rar|\d{3})/gi, '');
 
-    // 🚩 रैंडम हेक्स कोड चेक (जैसे 209e7f3cc17c4745b9109...)
+    // 🚩 रैंडम हेक्स कोड चेक
     const isRandomHex = /^[a-f0-9]{14,}$/i.test(text.trim()) || /^[a-z0-9_-]{18,}$/i.test(text.trim());
     if (isRandomHex) {
         const shortCode = text.trim().substring(0, 10);
@@ -22,32 +22,33 @@ function parseMediaInfo(rawText) {
         };
     }
 
-    // ⚡ 1. डॉट्स, डैश और ब्रैकेट्स को अलग-अलग शब्दों में बदलें (ताकि 2026 और 720p आपस में न चिपकें)
-    let preClean = text
+    // 1. सबसे पहले डॉट्स, ब्रैकेट्स, अंडरस्कोर को स्पेस में बदलें
+    let normalized = text
         .replace(/[\._\-]/g, ' ')
         .replace(/\[.*?\]/g, ' ')
         .replace(/\(.*?\)/g, ' ')
+        .replace(/\{.*?\}/g, ' ')
         .replace(/(https?:\/\/[^\s]+|t\.me\/[^\s]+|www\.[^\s]+|@\w+)/gi, ' ')
         .replace(/\s+/g, ' ')
         .trim();
 
-    // 2. मेटाडेटा और लेबल्स की पहचान
-    let yearMatch = preClean.match(/\b(19\d\d|20\d\d)\b/);
+    // 2. लेबल्स (क्वालिटी, सीरीज़, ऑडियो) निकालें
+    let yearMatch = normalized.match(/\b(19\d\d|20\d\d)\b/);
     let detectedYear = yearMatch ? yearMatch[0] : null;
 
-    let isSeries = /(s\d+\s*e\d+|season\s*\d+|episode\s*\d+|ep\s*\d+|complete\s*series|web\s*series|c\s*\d+|c\d+)/i.test(preClean);
-    let isDubbed = /(hindi|dubbed|dual\s*audio)/i.test(preClean);
+    let isSeries = /(s\d+\s*e\d+|season\s*\d+|episode\s*\d+|ep\s*\d+|complete\s*series|web\s*series|c\s*\d+|c\d+)/i.test(normalized);
+    let isDubbed = /(hindi|dubbed|dual\s*audio)/i.test(normalized);
 
-    let epMatch = preClean.match(/(s\d+\s*e\d+|season\s*\d+\s*ep\s*\d+|season\s*\d+|ep\s*\d+|episode\s*\d+|c\s*\d+|c\d+|part\s*\d+|part\d+)/i);
+    let epMatch = normalized.match(/(s\d+\s*e\d+|season\s*\d+\s*ep\s*\d+|season\s*\d+|ep\s*\d+|episode\s*\d+|c\s*\d+|c\d+|part\s*\d+|part\d+)/i);
     let episode = epMatch ? epMatch[0].toUpperCase() : '';
 
-    let qualityMatch = preClean.match(/\b(2160p|4k|1080p|720p|480p|360p|240p|fhd|uhd|hd|sd)\b/i);
+    let qualityMatch = normalized.match(/\b(2160p|4k|1080p|720p|480p|360p|240p|fhd|uhd|hd|sd)\b/i);
     let quality = qualityMatch ? qualityMatch[0].toUpperCase() : '';
 
-    let codecMatch = preClean.match(/\b(hevc|x265|h[\s]*265|x264|h[\s]*264|10[\s]*bit|8[\s]*bit|hdr|bluray|blu[\s]*ray|bdrip|web[\s]*dl|webrip)\b/i);
+    let codecMatch = normalized.match(/\b(hevc|x265|h[\s]*265|x264|h[\s]*264|10[\s]*bit|8[\s]*bit|hdr|bluray|blu[\s]*ray|bdrip|web[\s]*dl|webrip)\b/i);
     let codecInfo = codecMatch ? codecMatch[0].replace(/[\s\._-]+/g, '').toUpperCase() : '';
 
-    let audioMatch = preClean.match(/\b(ddp[\s]*5[\s]*1|5[\s]*1|2[\s]*0|aac[\s]*2[\s]*0|aac[\s]*5[\s]*1|aac|atmos|ac3)\b/i);
+    let audioMatch = normalized.match(/\b(ddp[\s]*5[\s]*1|5[\s]*1|2[\s]*0|aac[\s]*2[\s]*0|aac[\s]*5[\s]*1|aac|atmos|ac3)\b/i);
     let audioInfo = audioMatch ? audioMatch[0].replace(/[\s\._-]+/g, '.').toUpperCase() : '';
 
     let labelParts = [];
@@ -57,31 +58,32 @@ function parseMediaInfo(rawText) {
     if (audioInfo && !labelParts.includes(audioInfo)) labelParts.push(audioInfo);
     let label = labelParts.length > 0 ? labelParts.join(' - ') : 'Standard Quality';
 
-    // ⚡ 3. कट-ऑफ नियम: साल, रेज़ोल्यूशन, सीज़न या OTT कोड्स आते ही आगे का पूरा हिस्सा उड़ा दें
-    let anchorRegex = /\b(19\d\d|20\d\d|2160p|4k|1080p|720p|480p|360p|240p|s\d+|season|episode|ep\d+|complete|nf|netflix|amzn|prime|hotstar|zee5|sonyliv|jiocinema|aac|ddp|x264|x265|hevc|web\s*dl|bluray|hdrip)\b/i;
-    let matchIdx = preClean.search(anchorRegex);
-    if (matchIdx !== -1 && matchIdx > 2) {
-        preClean = preClean.substring(0, matchIdx);
+    // ⚡ 3. टोकन स्टॉप (Word-by-word cutting):
+    // जैसे ही कोई साल (19xx/20xx) या रिज़ोल्यूशन या कोडेक दिखे, वहीं रुक जाएँ!
+    const stopPattern = /^(19\d\d|20\d\d|2160p|4k|1080p|720p|480p|360p|240p|fhd|uhd|hd|sd|s\d+|season|episode|ep\d+|complete|nf|netflix|amzn|prime|hotstar|zee5|sonyliv|jiocinema|aac|ddp|x264|x265|hevc|web|bluray|hdrip|hindi|english|telugu|tamil|punjabi|dubbed|dual)$/i;
+
+    let words = normalized.split(/\s+/);
+    let titleWords = [];
+
+    for (let w of words) {
+        if (stopPattern.test(w)) {
+            break; // स्टॉपवर्ड आते ही आगे का सारा कचरा तुरंत ड्रॉप
+        }
+        titleWords.push(w);
     }
 
-    // 🧹 4. नाम की विस्तृत सफाई (वेबसाइट्स, भाषाओं और एक्स्ट्रा शब्दों की पूरी लिस्ट)
-    let clean = preClean
+    let clean = titleWords.join(' ')
         .replace(/\b(sample|preview|trailer|reloaded|version|uncut|extended|remastered)\b/gi, ' ')
         .replace(/\b(movies4u|bid|bolly4u|katmoviehd|vegamovies|filmyzilla|hdhub4u|uhdmovies|mkvcinemas|luxmovies|extramovies)\b/gi, ' ')
-        .replace(/\b(blu\s*ray|bluray|bdrip|brrip|dvdrip|web\s*dl|webdl|webrip|hdrip|hdtc|predvd)\b/gi, ' ')
-        .replace(/\b(10\s*bit|10bit|8\s*bit|8bit|hdr10|hdr|hevc|x265|x264|h265|h264|avc|remux|proper|hq)\b/gi, ' ')
-        .replace(/\b(480p|720p|1080p|2160p|4k|fhd|uhd|hd|sd|360p|240p)\b/gi, ' ')
-        .replace(/\b(ddp\s*5\s*1|5\s*1|2\s*0|aac\s*2\s*0|aac20|aac|dd\s*5\s*1|ddp20|ddp|dd|atmos|ac3)\b/gi, ' ')
-        .replace(/\b(hindi|english|telugu|tamil|punjabi|korean|dubbed|multi|dual\s*audio|org|original|full|esubs?|esub|subs?|subtitles?)\b/gi, ' ')
-        .replace(/\b(complete\s*web\s*series|complete\s*series|complet|comple|complete|web\s*series|series|combined|all\s*part|ds4k|ds|primex|prime|hotstar|zee5|sonyliv|jiocinema|clipmatezone|bulmoviee|bulmovie)\b/gi, ' ')
         .replace(/\b(south\s*movie|south|movie)\b/gi, ' ')
-        .replace(/\b(c\s*\d+|c\d+|v[0-9]|v\d+|hind|hin|eng|tam|tel|part\s*\d+|part\d+|line|lines)\b/gi, ' ')
-        .replace(/\b(s\d+\s*e\d+|season\s*\d+|ep\s*\d+|episode\s*\d+|s\d+|e\d+)\b/gi, ' ')
-        .replace(/\b(19\d\d|20\d\d)\b/g, ' ')
-        .replace(/\b\d{1,2}\s*$/, ' ')
         .replace(/[^\w\s]/gi, ' ')
         .replace(/\s+/g, ' ')
         .trim();
+
+    // अगर टोकन कटिंग से नाम खाली हो गया हो (दुर्लभ केस) तो ओरिजिनल बैकअप
+    if (!clean || clean.length < 2) {
+        clean = normalized.replace(/\b(2160p|1080p|720p|480p|hevc|x264|x265|aac)\b/gi, '').trim();
+    }
 
     clean = clean.split(' ').map(w => w.charAt(0).toUpperCase() + w.slice(1).toLowerCase()).join(' ');
 
@@ -103,26 +105,20 @@ function formatBytes(bytes) {
     return (bytes / Math.pow(1024, i)).toFixed(1) + ' ' + sizes[i];
 }
 
-// 🎯 सुपर-एडवांस प्रोग्रेसिव TMDB इंजन
+// 🎯 सुपर-सटीक TMDB इंजन (बिना गलत Anime या गलत मैच के)
 async function fetchTMDBData(title, year = null, isSeries = false) {
     const TMDB_KEY = process.env.TMDB_API_KEY;
     if (!TMDB_KEY || !title || title.trim().length < 2 || title.startsWith('Unknown_') || title === 'Unnamed Media') return null;
 
-    let sanitized = title
-        .replace(/\b(nf|netflix|amzn|prime|hotstar|zee5|sonyliv|jiocinema|aac\d*|ddp\d*|x264|x265|hevc|hd|rip|esub)\b/gi, '')
-        .replace(/\s+/g, ' ')
-        .trim();
+    let sanitized = title.trim();
 
-    if (!sanitized) sanitized = title;
-
+    // सिर्फ तभी शब्द कम करेंगे जब नाम 4 या उससे ज्यादा शब्दों का हो
+    // इससे 'Welcome To The Jungle' कभी कटकर 'Welcome to' नहीं बनेगा
     let words = sanitized.split(/\s+/);
-    let attempts = [];
-    attempts.push(words.join(' '));
-    if (words.length > 2) attempts.push(words.slice(0, -1).join(' '));
-    if (words.length > 3) attempts.push(words.slice(0, -2).join(' '));
-    if (words.length > 4) attempts.push(words.slice(0, -3).join(' '));
-
-    attempts = [...new Set(attempts)];
+    let attempts = [sanitized];
+    if (words.length >= 4) {
+        attempts.push(words.slice(0, -1).join(' '));
+    }
 
     for (let query of attempts) {
         if (!query || query.length < 2) continue;
@@ -152,11 +148,23 @@ async function fetchTMDBData(title, year = null, isSeries = false) {
                 let validResults = res.data.results.filter(r => r.poster_path);
                 if (validResults.length === 0) validResults = res.data.results;
 
-                let matched = validResults.find(r => (r.title || r.name || '').toLowerCase() === query.toLowerCase());
+                // 🛡️ सुरक्षा चेक: सिर्फ वही रिजल्ट चुनें जिसका नाम हमारी सर्च क्वेरी से सचमुच मिलता हो
+                let qLower = query.toLowerCase();
+                let matched = validResults.find(r => {
+                    let rTitle = (r.title || r.name || '').toLowerCase();
+                    return rTitle === qLower || rTitle.includes(qLower) || qLower.includes(rTitle);
+                });
+
+                // अगर कोई मैच नहीं मिला और पहली एंट्री पूरी तरह अलग है, तो उसे रिजेक्ट करें
                 if (!matched) {
-                    validResults.sort((a, b) => (b.popularity || 0) - (a.popularity || 0));
-                    matched = validResults[0];
+                    let top = validResults[0];
+                    let topTitle = (top.title || top.name || '').toLowerCase();
+                    if (topTitle.includes(words[0].toLowerCase())) {
+                        matched = top;
+                    }
                 }
+
+                if (!matched) continue;
 
                 const rawReleaseDate = matched.release_date || matched.first_air_date || null;
                 const releaseYear = rawReleaseDate ? rawReleaseDate.split('-')[0] : null;
