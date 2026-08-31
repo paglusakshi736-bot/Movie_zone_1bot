@@ -22,9 +22,8 @@ function parseMediaInfo(rawText) {
         };
     }
 
-    // ⚡ 1. सबसे पहले डॉट्स, अंडरस्कोर और ब्रैकेट्स को अलग-अलग शब्दों में बदलें
-    // इससे Alpha.2026.720p.NF आपस में चिपकने के बजाय 'Alpha 2026 720p NF' बन जाएगा
-    text = text
+    // ⚡ 1. डॉट्स, डैश और ब्रैकेट्स को अलग-अलग शब्दों में बदलें (ताकि 2026 और 720p आपस में न चिपकें)
+    let preClean = text
         .replace(/[\._\-]/g, ' ')
         .replace(/\[.*?\]/g, ' ')
         .replace(/\(.*?\)/g, ' ')
@@ -32,23 +31,23 @@ function parseMediaInfo(rawText) {
         .replace(/\s+/g, ' ')
         .trim();
 
-    // 2. लेबल के लिए मेटाडेटा (क्वालिटी, सीरीज़, ऑडियो) निकालें
-    let yearMatch = text.match(/\b(19\d\d|20\d\d)\b/);
+    // 2. मेटाडेटा और लेबल्स की पहचान
+    let yearMatch = preClean.match(/\b(19\d\d|20\d\d)\b/);
     let detectedYear = yearMatch ? yearMatch[0] : null;
 
-    let isSeries = /(s\d+\s*e\d+|season\s*\d+|episode\s*\d+|ep\s*\d+|complete\s*series|web\s*series|c\s*\d+|c\d+)/i.test(text);
-    let isDubbed = /(hindi|dubbed|dual\s*audio)/i.test(text);
+    let isSeries = /(s\d+\s*e\d+|season\s*\d+|episode\s*\d+|ep\s*\d+|complete\s*series|web\s*series|c\s*\d+|c\d+)/i.test(preClean);
+    let isDubbed = /(hindi|dubbed|dual\s*audio)/i.test(preClean);
 
-    let epMatch = text.match(/(s\d+\s*e\d+|season\s*\d+\s*ep\s*\d+|season\s*\d+|ep\s*\d+|episode\s*\d+|c\s*\d+|c\d+|part\s*\d+|part\d+)/i);
+    let epMatch = preClean.match(/(s\d+\s*e\d+|season\s*\d+\s*ep\s*\d+|season\s*\d+|ep\s*\d+|episode\s*\d+|c\s*\d+|c\d+|part\s*\d+|part\d+)/i);
     let episode = epMatch ? epMatch[0].toUpperCase() : '';
 
-    let qualityMatch = text.match(/\b(2160p|4k|1080p|720p|480p|360p|240p|fhd|uhd|hd|sd)\b/i);
+    let qualityMatch = preClean.match(/\b(2160p|4k|1080p|720p|480p|360p|240p|fhd|uhd|hd|sd)\b/i);
     let quality = qualityMatch ? qualityMatch[0].toUpperCase() : '';
 
-    let codecMatch = text.match(/\b(hevc|x265|h[\s]*265|x264|h[\s]*264|10[\s]*bit|8[\s]*bit|hdr|bluray|blu[\s]*ray|bdrip|web[\s]*dl|webrip)\b/i);
+    let codecMatch = preClean.match(/\b(hevc|x265|h[\s]*265|x264|h[\s]*264|10[\s]*bit|8[\s]*bit|hdr|bluray|blu[\s]*ray|bdrip|web[\s]*dl|webrip)\b/i);
     let codecInfo = codecMatch ? codecMatch[0].replace(/[\s\._-]+/g, '').toUpperCase() : '';
 
-    let audioMatch = text.match(/\b(ddp[\s]*5[\s]*1|5[\s]*1|2[\s]*0|aac[\s]*2[\s]*0|aac[\s]*5[\s]*1|aac|atmos|ac3)\b/i);
+    let audioMatch = preClean.match(/\b(ddp[\s]*5[\s]*1|5[\s]*1|2[\s]*0|aac[\s]*2[\s]*0|aac[\s]*5[\s]*1|aac|atmos|ac3)\b/i);
     let audioInfo = audioMatch ? audioMatch[0].replace(/[\s\._-]+/g, '.').toUpperCase() : '';
 
     let labelParts = [];
@@ -58,19 +57,28 @@ function parseMediaInfo(rawText) {
     if (audioInfo && !labelParts.includes(audioInfo)) labelParts.push(audioInfo);
     let label = labelParts.length > 0 ? labelParts.join(' - ') : 'Standard Quality';
 
-    // ⚡ 3. परफेक्ट एंकर कटिंग: साल, रेजोल्यूशन, सीज़न, या OTT कोड्स दिखते ही आगे का पूरा हिस्सा साफ़
+    // ⚡ 3. कट-ऑफ नियम: साल, रेज़ोल्यूशन, सीज़न या OTT कोड्स आते ही आगे का पूरा हिस्सा उड़ा दें
     let anchorRegex = /\b(19\d\d|20\d\d|2160p|4k|1080p|720p|480p|360p|240p|s\d+|season|episode|ep\d+|complete|nf|netflix|amzn|prime|hotstar|zee5|sonyliv|jiocinema|aac|ddp|x264|x265|hevc|web\s*dl|bluray|hdrip)\b/i;
-    let matchIdx = text.search(anchorRegex);
+    let matchIdx = preClean.search(anchorRegex);
     if (matchIdx !== -1 && matchIdx > 2) {
-        text = text.substring(0, matchIdx);
+        preClean = preClean.substring(0, matchIdx);
     }
 
-    // 🧹 4. वेबसाइट वॉटरमार्क और अतिरिक्त सिंबल हटाकर शुद्ध टाइटल तैयार करें
-    let clean = text
+    // 🧹 4. नाम की विस्तृत सफाई (वेबसाइट्स, भाषाओं और एक्स्ट्रा शब्दों की पूरी लिस्ट)
+    let clean = preClean
         .replace(/\b(sample|preview|trailer|reloaded|version|uncut|extended|remastered)\b/gi, ' ')
         .replace(/\b(movies4u|bid|bolly4u|katmoviehd|vegamovies|filmyzilla|hdhub4u|uhdmovies|mkvcinemas|luxmovies|extramovies)\b/gi, ' ')
+        .replace(/\b(blu\s*ray|bluray|bdrip|brrip|dvdrip|web\s*dl|webdl|webrip|hdrip|hdtc|predvd)\b/gi, ' ')
+        .replace(/\b(10\s*bit|10bit|8\s*bit|8bit|hdr10|hdr|hevc|x265|x264|h265|h264|avc|remux|proper|hq)\b/gi, ' ')
+        .replace(/\b(480p|720p|1080p|2160p|4k|fhd|uhd|hd|sd|360p|240p)\b/gi, ' ')
+        .replace(/\b(ddp\s*5\s*1|5\s*1|2\s*0|aac\s*2\s*0|aac20|aac|dd\s*5\s*1|ddp20|ddp|dd|atmos|ac3)\b/gi, ' ')
         .replace(/\b(hindi|english|telugu|tamil|punjabi|korean|dubbed|multi|dual\s*audio|org|original|full|esubs?|esub|subs?|subtitles?)\b/gi, ' ')
+        .replace(/\b(complete\s*web\s*series|complete\s*series|complet|comple|complete|web\s*series|series|combined|all\s*part|ds4k|ds|primex|prime|hotstar|zee5|sonyliv|jiocinema|clipmatezone|bulmoviee|bulmovie)\b/gi, ' ')
         .replace(/\b(south\s*movie|south|movie)\b/gi, ' ')
+        .replace(/\b(c\s*\d+|c\d+|v[0-9]|v\d+|hind|hin|eng|tam|tel|part\s*\d+|part\d+|line|lines)\b/gi, ' ')
+        .replace(/\b(s\d+\s*e\d+|season\s*\d+|ep\s*\d+|episode\s*\d+|s\d+|e\d+)\b/gi, ' ')
+        .replace(/\b(19\d\d|20\d\d)\b/g, ' ')
+        .replace(/\b\d{1,2}\s*$/, ' ')
         .replace(/[^\w\s]/gi, ' ')
         .replace(/\s+/g, ' ')
         .trim();
@@ -100,7 +108,6 @@ async function fetchTMDBData(title, year = null, isSeries = false) {
     const TMDB_KEY = process.env.TMDB_API_KEY;
     if (!TMDB_KEY || !title || title.trim().length < 2 || title.startsWith('Unknown_') || title === 'Unnamed Media') return null;
 
-    // 1. नाम के अंत में बचे अनचाहे कोड्स हटाएँ
     let sanitized = title
         .replace(/\b(nf|netflix|amzn|prime|hotstar|zee5|sonyliv|jiocinema|aac\d*|ddp\d*|x264|x265|hevc|hd|rip|esub)\b/gi, '')
         .replace(/\s+/g, ' ')
@@ -108,7 +115,6 @@ async function fetchTMDBData(title, year = null, isSeries = false) {
 
     if (!sanitized) sanitized = title;
 
-    // 2. प्रोग्रेसिव वर्ड्स एटेम्पट्स (पूरा नाम -> 1 शब्द कम -> 2 शब्द कम)
     let words = sanitized.split(/\s+/);
     let attempts = [];
     attempts.push(words.join(' '));
@@ -131,21 +137,18 @@ async function fetchTMDBData(title, year = null, isSeries = false) {
 
             let res = await axios.get(`https://api.themoviedb.org/3/${endpoint}`, { params, timeout: 5000 });
 
-            // अगर साल के साथ 0 रिज़ल्ट आए, तो साल हटाकर तुरंत सर्च करें
             if ((!res.data || !res.data.results || res.data.results.length === 0) && year) {
                 delete params.primary_release_year;
                 delete params.first_air_date_year;
                 res = await axios.get(`https://api.themoviedb.org/3/${endpoint}`, { params, timeout: 5000 });
             }
 
-            // अगर प्राइमरी में न मिले, तो उल्टे एंडपॉइंट (Movie <-> TV) पर ऑटो-चेक करें
             if (!res.data || !res.data.results || res.data.results.length === 0) {
                 const altEndpoint = isSeries ? 'search/movie' : 'search/tv';
                 res = await axios.get(`https://api.themoviedb.org/3/${altEndpoint}`, { params: { api_key: TMDB_KEY, query: query.trim() }, timeout: 5000 });
             }
 
             if (res.data && res.data.results && res.data.results.length > 0) {
-                // केवल वही चुनें जिनमें पोस्टर मौजूद हो
                 let validResults = res.data.results.filter(r => r.poster_path);
                 if (validResults.length === 0) validResults = res.data.results;
 
@@ -177,9 +180,7 @@ async function fetchTMDBData(title, year = null, isSeries = false) {
                     category: tmdbCategory
                 };
             }
-        } catch (e) {
-            // अगले प्रयास पर जारी रखें
-        }
+        } catch (e) {}
     }
 
     return null;
