@@ -5,13 +5,17 @@ function parseMediaInfo(rawText) {
         return { cleanTitle: 'Unnamed Media', label: 'Standard Quality', isSeries: false, isDubbed: false, detectedYear: null, isOther: true, needsFix: true };
     }
 
-    // ⚡ 1. बॉर्डर/बॉक्स वाली खाली लाइनों को छोड़ें और असली टेक्स्ट वाली पहली लाइन ढूंढें
-    const lines = rawText.split('\n').map(l => l.trim()).filter(l => l.length > 0);
-    let targetLine = lines.find(l => /[a-zA-Z0-9]/.test(l)) || lines[0] || '';
+    // ⚡ 1. हिडन यूनिकोड स्पेस हटाएँ और बॉक्स/बॉर्डर वाली खाली लाइन छोड़कर असली नाम चुनें
+    const cleanedRaw = rawText.replace(/[\u200B-\u200D\uFEFF]/g, '');
+    const lines = cleanedRaw.split('\n').map(l => l.trim()).filter(l => l.length > 0);
+    let targetLine = lines.find(l => {
+        const withoutBox = l.replace(/[┏┓┗┛━┃│─═]/g, '').trim();
+        return /[a-zA-Z0-9]/.test(withoutBox);
+    }) || lines[0] || '';
 
     let text = targetLine.replace(/\.(mp4|mkv|avi|mov|zip|rar|\d{3})/gi, '');
 
-    // 🚩 रैंडम हेक्स कोड चेक
+    // 🚩 रैंडम हेक्स कोड चेक (जैसे 209e7f3cc17c4745b9109...)
     const isRandomHex = /^[a-f0-9]{14,}$/i.test(text.trim()) || /^[a-z0-9_-]{18,}$/i.test(text.trim());
     if (isRandomHex) {
         const shortCode = text.trim().substring(0, 10);
@@ -26,17 +30,7 @@ function parseMediaInfo(rawText) {
         };
     }
 
-    // ⚡ 2. इमोजी, स्पेशल सिंबल्स, बॉर्डर्स और लिंक्स साफ़ करें
-    let normalized = text
-        .replace(/([\u2700-\u27BF]|[\uE000-\uF8FF]|\uD83C[\uDC00-\uDFFF]|\uD83D[\uDC00-\uDFFF]|[\u2011-\u26FF]|\uD83E[\uDD10-\uDDFF])/g, ' ')
-        .replace(/[┏┓┗┛━┃│─]/g, ' ')
-        .replace(/[\[\(\{].*?[\]\)\}]/g, ' ')
-        .replace(/(https?:\/\/[^\s]+|t\.me\/[^\s]+|www\.[^\s]+|@\w+)/gi, ' ')
-        .replace(/[^a-zA-Z0-9\s]/g, ' ')
-        .replace(/\s+/g, ' ')
-        .trim();
-
-    // 3. लेबल्स (सीरीज़, क्वालिटी, ऑडियो) निकालें
+    // 1. एक्स्ट्रा जानकारी पहले ही निकाल लें (ताकि लेबल सही बन सके)
     let yearMatch = text.match(/\b(19\d\d|20\d\d)\b/);
     let detectedYear = yearMatch ? yearMatch[0] : null;
 
@@ -46,13 +40,13 @@ function parseMediaInfo(rawText) {
     let epMatch = text.match(/(s\d+\s*e\d+[\s\-_]*\d*|season\s*\d+\s*ep\s*\d+[\s\-_]*\d*|season\s*\d+|ep\s*\d+|episode\s*\d+|c\s*\d+|c\d+|part\s*\d+|part\d+)/i);
     let episode = epMatch ? epMatch[0].replace(/[\(\)\[\]]/g, '').trim().toUpperCase() : '';
 
-    let qualityMatch = text.match(/\b(2160p|4k|1080p|720p|480p|360p|240p|fhd|uhd|hd|sd)\b/i);
+    let qualityMatch = text.match(/(2160p|4k|1080p|720p|480p|360p|240p|fhd|uhd|hd|sd)/i);
     let quality = qualityMatch ? qualityMatch[0].toUpperCase() : '';
 
-    let codecMatch = text.match(/\b(hevc|x265|h[\s]*265|x264|h[\s]*264|10[\s]*bit|8[\s]*bit|hdr|bluray|blu[\s]*ray|bdrip|web[\s]*dl|webrip)\b/i);
+    let codecMatch = text.match(/(hevc|x265|h[\s\._-]*265|x264|h[\s\._-]*264|10[\s\._-]*bit|8[\s\._-]*bit|hdr|bluray|blu[\s\._-]*ray|bdrip|web[\s\._-]*dl|webrip)/i);
     let codecInfo = codecMatch ? codecMatch[0].replace(/[\s\._-]+/g, '').toUpperCase() : '';
 
-    let audioMatch = text.match(/\b(ddp[\s]*5[\s]*1|5[\s]*1|2[\s]*0|aac[\s]*2[\s]*0|aac[\s]*5[\s]*1|aac|atmos|ac3)\b/i);
+    let audioMatch = text.match(/(ddp[\s\._-]*5[\s\._-]*1|5[\s\._-]*1|2[\s\._-]*0|aac[\s\._-]*2[\s\._-]*0|aac|atmos|ac3)/i);
     let audioInfo = audioMatch ? audioMatch[0].replace(/[\s\._-]+/g, '.').toUpperCase() : '';
 
     let labelParts = [];
@@ -62,30 +56,29 @@ function parseMediaInfo(rawText) {
     if (audioInfo && !labelParts.includes(audioInfo)) labelParts.push(audioInfo);
     let label = labelParts.length > 0 ? labelParts.join(' - ') : 'Standard Quality';
 
-    // ⚡ 4. टोकन स्टॉप (S01, 2023, 720p दिखते ही आगे का सब कट)
-    const stopPattern = /^(19\d\d|20\d\d|2160p|4k|1080p|720p|480p|360p|240p|fhd|uhd|hd|sd|s\d+|s\d+e\d+|season|episode|ep\d+|complete|nf|netflix|amzn|prime|hotstar|zee5|sonyliv|jiocinema|aac|ddp|x264|x265|hevc|web|bluray|hdrip|hindi|english|telugu|tamil|punjabi|dubbed|dual)$/i;
-
-    let words = normalized.split(/\s+/);
-    let titleWords = [];
-
-    for (let w of words) {
-        if (stopPattern.test(w)) {
-            break;
-        }
-        titleWords.push(w);
+    // ⚡ 2. सॉलिड एंकर कटिंग: साल, क्वालिटी, सीज़न, या OTT/ऑडियो कोड्स मिलते ही उसके बाद का सारा टेक्स्ट काट दें
+    let anchorRegex = /\b(19\d\d|20\d\d|2160p|4k|1080p|720p|480p|360p|240p|s\d+|s\d+e\d+|season|ep\d+|episode|complete|nf|netflix|amzn|prime|hotstar|zee5|sonyliv|jiocinema|aac\d*|ddp\d*|x264|x265|hevc)\b/i;
+    let matchIdx = text.search(anchorRegex);
+    if (matchIdx !== -1 && matchIdx > 3) {
+        text = text.substring(0, matchIdx);
     }
 
-    let clean = titleWords.join(' ')
+    // 🧹 3. सिंबल, ब्रैकेट्स, इमोजी और वेबसाइट वॉटरमार्क की पूरी सफाई
+    let clean = text
+        .replace(/([\u2700-\u27BF]|[\uE000-\uF8FF]|\uD83C[\uDC00-\uDFFF]|\uD83D[\uDC00-\uDFFF]|[\u2011-\u26FF]|\uD83E[\uDD10-\uDDFF])/g, ' ')
+        .replace(/[┏┓┗┛━┃│─═]/g, ' ')
+        .replace(/\[.*?\]/g, ' ')
+        .replace(/\(.*?\)/g, ' ')
+        .replace(/(https?:\/\/[^\s]+|t\.me\/[^\s]+|www\.[^\s]+|@\w+)/gi, ' ')
+        .replace(/[\._\-]/g, ' ')
         .replace(/\b(sample|preview|trailer|reloaded|version|uncut|extended|remastered)\b/gi, ' ')
         .replace(/\b(movies4u|bid|bolly4u|katmoviehd|vegamovies|filmyzilla|hdhub4u|uhdmovies|mkvcinemas|luxmovies|extramovies)\b/gi, ' ')
+        .replace(/\b(blu\s*ray|bluray|bdrip|brrip|dvdrip|web\s*dl|webdl|webrip|hdrip|hdtc|predvd)\b/gi, ' ')
+        .replace(/\b(hindi|english|telugu|tamil|punjabi|korean|dubbed|multi|dual\s*audio|org|original|full|esubs?|esub|subs?|subtitles?)\b/gi, ' ')
         .replace(/\b(south\s*movie|south|movie)\b/gi, ' ')
         .replace(/[^\w\s]/gi, ' ')
         .replace(/\s+/g, ' ')
         .trim();
-
-    if (!clean || clean.length < 2) {
-        clean = normalized.replace(/\b(2160p|1080p|720p|480p|hevc|x264|x265|aac)\b/gi, '').trim();
-    }
 
     clean = clean.split(' ').map(w => w.charAt(0).toUpperCase() + w.slice(1).toLowerCase()).join(' ');
 
@@ -107,17 +100,28 @@ function formatBytes(bytes) {
     return (bytes / Math.pow(1024, i)).toFixed(1) + ' ' + sizes[i];
 }
 
-// 🎯 TMDB इंजन
+// 🎯 सुपर-एडवांस प्रोग्रेसिव TMDB इंजन
 async function fetchTMDBData(title, year = null, isSeries = false) {
     const TMDB_KEY = process.env.TMDB_API_KEY;
     if (!TMDB_KEY || !title || title.trim().length < 2 || title.startsWith('Unknown_') || title === 'Unnamed Media') return null;
 
-    let sanitized = title.trim();
+    // 1. नाम के अंत में चिपके OTT / Codec टैग्स को ट्रिम करें
+    let sanitized = title
+        .replace(/\b(nf|netflix|amzn|prime|hotstar|zee5|sonyliv|jiocinema|aac\d*|ddp\d*|x264|x265|hevc|hd|rip|esub)\b/gi, '')
+        .replace(/\s+/g, ' ')
+        .trim();
+
+    if (!sanitized) sanitized = title;
+
+    // 2. प्रोग्रेसिव वर्ड्स एटेम्पट्स (Longest to Shortest)
     let words = sanitized.split(/\s+/);
-    let attempts = [sanitized];
-    if (words.length >= 4) {
-        attempts.push(words.slice(0, -1).join(' '));
-    }
+    let attempts = [];
+    attempts.push(words.join(' '));
+    if (words.length > 2) attempts.push(words.slice(0, -1).join(' '));
+    if (words.length > 3) attempts.push(words.slice(0, -2).join(' '));
+    if (words.length > 4) attempts.push(words.slice(0, -3).join(' '));
+
+    attempts = [...new Set(attempts)];
 
     for (let query of attempts) {
         if (!query || query.length < 2) continue;
@@ -132,36 +136,30 @@ async function fetchTMDBData(title, year = null, isSeries = false) {
 
             let res = await axios.get(`https://api.themoviedb.org/3/${endpoint}`, { params, timeout: 5000 });
 
+            // अगर साल के साथ 0 रिज़ल्ट आए, तो साल हटाकर तुरंत चेक करें
             if ((!res.data || !res.data.results || res.data.results.length === 0) && year) {
                 delete params.primary_release_year;
                 delete params.first_air_date_year;
                 res = await axios.get(`https://api.themoviedb.org/3/${endpoint}`, { params, timeout: 5000 });
             }
 
+            // अगर प्राइमरी में न मिले, तो उल्टे एंडपॉइंट (Movie <-> TV) पर ऑटो-चेक करें
             if (!res.data || !res.data.results || res.data.results.length === 0) {
                 const altEndpoint = isSeries ? 'search/movie' : 'search/tv';
                 res = await axios.get(`https://api.themoviedb.org/3/${altEndpoint}`, { params: { api_key: TMDB_KEY, query: query.trim() }, timeout: 5000 });
             }
 
             if (res.data && res.data.results && res.data.results.length > 0) {
+                // पहले वही चुनें जिनमें पोस्टर मौजूद हो
                 let validResults = res.data.results.filter(r => r.poster_path);
                 if (validResults.length === 0) validResults = res.data.results;
 
-                let qLower = query.toLowerCase();
-                let matched = validResults.find(r => {
-                    let rTitle = (r.title || r.name || '').toLowerCase();
-                    return rTitle === qLower || rTitle.includes(qLower) || qLower.includes(rTitle);
-                });
-
+                // सटीक टाइटल मैच या सबसे पॉपुलर रिज़ल्ट चुनें
+                let matched = validResults.find(r => (r.title || r.name || '').toLowerCase() === query.toLowerCase());
                 if (!matched) {
-                    let top = validResults[0];
-                    let topTitle = (top.title || top.name || '').toLowerCase();
-                    if (topTitle.includes(words[0].toLowerCase())) {
-                        matched = top;
-                    }
+                    validResults.sort((a, b) => (b.popularity || 0) - (a.popularity || 0));
+                    matched = validResults[0];
                 }
-
-                if (!matched) continue;
 
                 const rawReleaseDate = matched.release_date || matched.first_air_date || null;
                 const releaseYear = rawReleaseDate ? rawReleaseDate.split('-')[0] : null;
@@ -185,7 +183,9 @@ async function fetchTMDBData(title, year = null, isSeries = false) {
                     category: tmdbCategory
                 };
             }
-        } catch (e) {}
+        } catch (e) {
+            // अगले प्रयास पर जारी रखें
+        }
     }
 
     return null;
