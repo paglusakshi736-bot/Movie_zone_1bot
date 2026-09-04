@@ -51,7 +51,6 @@ module.exports = function createApiRoutes(bot) {
                 ];
             } else {
                 // 🎬 नॉर्मल/मुख्य स्क्रीन (All, Latest, Hollywood, Hindi, Web Series, etc.)
-                // यहाँ केवल वही आएँगे जिनका साफ़ नाम और पोस्टर है (Unknown और बिना पोस्टर वाली पूरी तरह ब्लॉक)
                 query.$and = [
                     { category: { $ne: 'Others' } },
                     { title: { $not: { $regex: /^Unknown_/i } } },
@@ -70,9 +69,11 @@ module.exports = function createApiRoutes(bot) {
                 }
             }
 
+            // ⚡ सॉर्टिंग लॉजिक:
+            // "Latest" टैब में असली रिलीज़ डेट और साल के हिसाब से नई रिलीज़ सबसे ऊपर आएगी
             let sortOption = { updatedAt: -1 };
             if (category === 'Latest') {
-                sortOption = { _id: -1 };
+                sortOption = { releaseDate: -1, year: -1, updatedAt: -1 };
             }
 
             const movies = await Movie.find(query)
