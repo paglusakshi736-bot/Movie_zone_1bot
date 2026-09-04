@@ -5,10 +5,13 @@ function parseMediaInfo(rawText) {
         return { cleanTitle: 'Unnamed Media', label: 'Standard Quality', isSeries: false, isDubbed: false, detectedYear: null, isOther: true, needsFix: true };
     }
 
-    // पहली लाइन लें और एक्सटेंशन अलग करें
-    let text = rawText.split('\n')[0].replace(/\.(mp4|mkv|avi|mov|zip|rar|\d{3})/gi, '');
+    // ⚡ 1. बॉर्डर/बॉक्स वाली खाली लाइनों को छोड़ें और असली टेक्स्ट वाली पहली लाइन ढूंढें
+    const lines = rawText.split('\n').map(l => l.trim()).filter(l => l.length > 0);
+    let targetLine = lines.find(l => /[a-zA-Z0-9]/.test(l)) || lines[0] || '';
 
-    // 🚩 रैंडम हेक्स कोड चेक (जैसे 209e7f3cc17c4745b9109...)
+    let text = targetLine.replace(/\.(mp4|mkv|avi|mov|zip|rar|\d{3})/gi, '');
+
+    // 🚩 रैंडम हेक्स कोड चेक
     const isRandomHex = /^[a-f0-9]{14,}$/i.test(text.trim()) || /^[a-z0-9_-]{18,}$/i.test(text.trim());
     if (isRandomHex) {
         const shortCode = text.trim().substring(0, 10);
@@ -23,25 +26,23 @@ function parseMediaInfo(rawText) {
         };
     }
 
-    // ⚡ 1. इमोजी, स्पेशल सिंबल्स, डॉट्स और ब्रेकेट्स पूरी तरह साफ़ करें
+    // ⚡ 2. इमोजी, स्पेशल सिंबल्स, बॉर्डर्स और लिंक्स साफ़ करें
     let normalized = text
         .replace(/([\u2700-\u27BF]|[\uE000-\uF8FF]|\uD83C[\uDC00-\uDFFF]|\uD83D[\uDC00-\uDFFF]|[\u2011-\u26FF]|\uD83E[\uDD10-\uDDFF])/g, ' ')
-        .replace(/[\._\-]/g, ' ')
-        .replace(/\[.*?\]/g, ' ')
-        .replace(/\(.*?\)/g, ' ')
-        .replace(/\{.*?\}/g, ' ')
+        .replace(/[┏┓┗┛━┃│─]/g, ' ')
+        .replace(/[\[\(\{].*?[\]\)\}]/g, ' ')
         .replace(/(https?:\/\/[^\s]+|t\.me\/[^\s]+|www\.[^\s]+|@\w+)/gi, ' ')
+        .replace(/[^a-zA-Z0-9\s]/g, ' ')
         .replace(/\s+/g, ' ')
         .trim();
 
-    // 2. लेबल्स (क्वालिटी, सीरीज़, ऑडियो) निकालें
+    // 3. लेबल्स (सीरीज़, क्वालिटी, ऑडियो) निकालें
     let yearMatch = text.match(/\b(19\d\d|20\d\d)\b/);
     let detectedYear = yearMatch ? yearMatch[0] : null;
 
     let isSeries = /(s\d+\s*e\d+|season\s*\d+|episode\s*\d+|ep\s*\d+|complete\s*series|web\s*series|c\s*\d+|c\d+)/i.test(text);
     let isDubbed = /(hindi|dubbed|dual\s*audio)/i.test(text);
 
-    // स्मार्ट एपिसोड डिटेक्टर (S01 E01 04 या S01E01 दोनों पकड़ेगा)
     let epMatch = text.match(/(s\d+\s*e\d+[\s\-_]*\d*|season\s*\d+\s*ep\s*\d+[\s\-_]*\d*|season\s*\d+|ep\s*\d+|episode\s*\d+|c\s*\d+|c\d+|part\s*\d+|part\d+)/i);
     let episode = epMatch ? epMatch[0].replace(/[\(\)\[\]]/g, '').trim().toUpperCase() : '';
 
@@ -61,8 +62,7 @@ function parseMediaInfo(rawText) {
     if (audioInfo && !labelParts.includes(audioInfo)) labelParts.push(audioInfo);
     let label = labelParts.length > 0 ? labelParts.join(' - ') : 'Standard Quality';
 
-    // ⚡ 3. टोकन स्टॉप (Word-by-word cutting):
-    // जैसे ही कोई साल, एपिसोड कोड, या क्वालिटी आए—वहीं रुक जाएँ
+    // ⚡ 4. टोकन स्टॉप (S01, 2023, 720p दिखते ही आगे का सब कट)
     const stopPattern = /^(19\d\d|20\d\d|2160p|4k|1080p|720p|480p|360p|240p|fhd|uhd|hd|sd|s\d+|s\d+e\d+|season|episode|ep\d+|complete|nf|netflix|amzn|prime|hotstar|zee5|sonyliv|jiocinema|aac|ddp|x264|x265|hevc|web|bluray|hdrip|hindi|english|telugu|tamil|punjabi|dubbed|dual)$/i;
 
     let words = normalized.split(/\s+/);
@@ -70,7 +70,7 @@ function parseMediaInfo(rawText) {
 
     for (let w of words) {
         if (stopPattern.test(w)) {
-            break; // स्टॉपवर्ड आते ही आगे का पूरा टेक्स्ट ड्रॉप
+            break;
         }
         titleWords.push(w);
     }
@@ -83,7 +83,6 @@ function parseMediaInfo(rawText) {
         .replace(/\s+/g, ' ')
         .trim();
 
-    // बैकअप अगर नाम खाली हो जाए
     if (!clean || clean.length < 2) {
         clean = normalized.replace(/\b(2160p|1080p|720p|480p|hevc|x264|x265|aac)\b/gi, '').trim();
     }
@@ -108,7 +107,7 @@ function formatBytes(bytes) {
     return (bytes / Math.pow(1024, i)).toFixed(1) + ' ' + sizes[i];
 }
 
-// 🎯 सुपर-सटीक TMDB इंजन (सख्त मैचिंग के साथ)
+// 🎯 TMDB इंजन
 async function fetchTMDBData(title, year = null, isSeries = false) {
     const TMDB_KEY = process.env.TMDB_API_KEY;
     if (!TMDB_KEY || !title || title.trim().length < 2 || title.startsWith('Unknown_') || title === 'Unnamed Media') return null;
