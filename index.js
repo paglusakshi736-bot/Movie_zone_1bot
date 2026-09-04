@@ -3,6 +3,7 @@ const express = require('express');
 const mongoose = require('mongoose');
 const cors = require('cors');
 const TelegramBot = require('node-telegram-bot-api');
+const axios = require('axios');
 
 const setupBotHandlers = require('./bot/handlers');
 const createApiRoutes = require('./routes/api');
@@ -50,6 +51,19 @@ mongoose.connect(MONGO_URI)
             { command: 'broadcast', description: 'Send message to all users' }
         ]).catch(() => {});
 
-        app.listen(PORT, '0.0.0.0', () => console.log(`🚀 Server running on port ${PORT}`));
+        app.listen(PORT, '0.0.0.0', () => {
+            console.log(`🚀 Server running on port ${PORT}`);
+
+            // ⚡ Self-Ping: Render Free Tier को स्लीप होने से बचाने के लिए
+            const APP_URL = 'https://movie-zone-1bot.onrender.com';
+            setInterval(async () => {
+                try {
+                    await axios.get(APP_URL);
+                    console.log('[Self-Ping]: Server kept awake successfully');
+                } catch (err) {
+                    console.log('[Self-Ping]: Ping sent (status received)');
+                }
+            }, 5 * 60 * 1000); // हर 5 मिनट में ऑटो पिंग
+        });
     })
     .catch(err => console.error('❌ MongoDB Connection Error:', err.message));
