@@ -745,7 +745,7 @@ module.exports = function setupBotHandlers(bot) {
             }
 
             bulkProcessedCount++;
-            if (bulkProcessedCount % 100 === 0) {
+            if (bulkProcessedCount % 100 === 0 && chatId) {
                 bot.sendMessage(
                     chatId,
                     `📊 <b>[बल्क अपलोड स्टेटस]:</b> कुल <b>${bulkProcessedCount}</b> फ़ाइलें सफलतापूर्वक प्रोसेस और सेव हो चुकी हैं!`,
@@ -757,11 +757,13 @@ module.exports = function setupBotHandlers(bot) {
             bulkNotificationTimer = setTimeout(async () => {
                 try {
                     const totalMovies = await Movie.countDocuments();
-                    bot.sendMessage(
-                        chatId,
-                        `🎉 <b>बल्क अपलोड पूरा हुआ!</b>\n\n📥 हाल में प्रोसेस की गईं फ़ाइलें: <b>${bulkProcessedCount}</b>\n🎬 डेटाबेस में कुल कार्ड्स: <b>${totalMovies}</b>`,
-                        { parse_mode: 'HTML' }
-                    );
+                    if (chatId) {
+                        bot.sendMessage(
+                            chatId,
+                            `🎉 <b>बल्क अपलोड पूरा हुआ!</b>\n\n📥 हाल में प्रोसेस की गईं फ़ाइलें: <b>${bulkProcessedCount}</b>\n🎬 डेटाबेस में कुल कार्ड्स: <b>${totalMovies}</b>`,
+                            { parse_mode: 'HTML' }
+                        ).catch(() => {});
+                    }
                     bulkProcessedCount = 0;
                 } catch (e) {}
             }, 5000);
@@ -771,6 +773,61 @@ module.exports = function setupBotHandlers(bot) {
         }
     }
 
+    // ⚡ साझा मीडिया हैंडलर (पर्सनल चैट और चैनल दोनों के लिए)
+    async function handleIncomingFile(msg, isChannel = false) {
+        const file = msg.video || msg.document;
+        if (!file) return;
+
+        uploadQueue = uploadQueue.then(async () => {
+            let rawInput = msg.caption || file.file_name || '';
+
+            if (!rawInput && file.file_id) {
+                try {
+                    const fileInfo = await bot.getFile(file.file_id);
+                    if (fileInfo && fileInfo.file_path) {
+                        const extracted = fileInfo.file_path.split('/').pop().replace(/\.[^/.]+$/, "");
+                        if (!extracted.startsWith('file_')) {
+                            rawInput = extracted;
+                        }
+                    }
+                } catch (e) {}
+            }
+
+            const { cleanTitle, label, isSeries, isDubbed, detectedYear, isOther } = parseMediaInfo(rawInput);
+            const fileId = file.file_id;
+            const fileType = msg.video ? 'video' : 'document';
+            const fileSize = formatBytes(file.file_size);
+            let thumbFileId = file.thumbnail ? file.thumbnail.file_id : null;
+
+            const fileData = { fileId, fileType, fileSize, thumbFileId, label, isSeries, isDubbed, detectedYear, isOther };
+
+            const notifyChatId = isChannel ? (ADMIN_ID ? ADMIN_ID.split(',')[0].trim() : null) : msg.chat.id;
+
+            if (!cleanTitle) {
+                if (!isChannel) {
+                    if (!adminFileQueue[msg.chat.id]) adminFileQueue[msg.chat.id] = [];
+                    adminFileQueue[msg.chat.id].push(fileData);
+                    
+                    if (adminFileQueue[msg.chat.id].length === 1) {
+                        await processNextPendingFile(bot, msg.chat.id);
+                    }
+                }
+                return;
+            }
+
+            await saveMovieToDB(bot, notifyChatId, cleanTitle, fileData);
+            await new Promise(r => setTimeout(r, 120)); // माइक्रो सेफ़्टी डीले
+        });
+    }
+
+    // 📢 1. चैनल पोस्ट लिसनर (जब आप किसी चैनल में फ़ाइलें डंप करेंगे)
+    bot.on('channel_post', async (msg) => {
+        if (msg.document || msg.video) {
+            await handleIncomingFile(msg, true);
+        }
+    });
+
+    // 👤 2. पर्सनल चैट लिसनर (जब आप बॉट को डायरेक्ट फ़ॉरवर्ड करेंगे)
     bot.on('message', async (msg) => {
         // 💬 ग्रुप में किसी के मूवी नाम पूछने पर ऑटो-गाइड
         if (msg.chat && (msg.chat.type === 'group' || msg.chat.type === 'supergroup')) {
@@ -818,44 +875,8 @@ module.exports = function setupBotHandlers(bot) {
         if (msg.text && msg.text.startsWith('/')) return;
         if (msg.photo && msg.caption && msg.caption.startsWith('/setposter')) return;
 
-        const file = msg.video || msg.document;
-        if (!file) return;
-
-        uploadQueue = uploadQueue.then(async () => {
-            let rawInput = msg.caption || file.file_name || '';
-
-            if (!rawInput && file.file_id) {
-                try {
-                    const fileInfo = await bot.getFile(file.file_id);
-                    if (fileInfo && fileInfo.file_path) {
-                        const extracted = fileInfo.file_path.split('/').pop().replace(/\.[^/.]+$/, "");
-                        if (!extracted.startsWith('file_')) {
-                            rawInput = extracted;
-                        }
-                    }
-                } catch (e) {}
-            }
-
-            const { cleanTitle, label, isSeries, isDubbed, detectedYear, isOther } = parseMediaInfo(rawInput);
-            const fileId = file.file_id;
-            const fileType = msg.video ? 'video' : 'document';
-            const fileSize = formatBytes(file.file_size);
-            let thumbFileId = file.thumbnail ? file.thumbnail.file_id : null;
-
-            const fileData = { fileId, fileType, fileSize, thumbFileId, label, isSeries, isDubbed, detectedYear, isOther };
-
-            if (!cleanTitle) {
-                if (!adminFileQueue[msg.chat.id]) adminFileQueue[msg.chat.id] = [];
-                adminFileQueue[msg.chat.id].push(fileData);
-                
-                if (adminFileQueue[msg.chat.id].length === 1) {
-                    await processNextPendingFile(bot, msg.chat.id);
-                }
-                return;
-            }
-
-            await saveMovieToDB(bot, msg.chat.id, cleanTitle, fileData);
-            await new Promise(r => setTimeout(r, 120)); // माइक्रो सेफ़्टी डीले
-        });
+        if (msg.video || msg.document) {
+            await handleIncomingFile(msg, false);
+        }
     });
 };
