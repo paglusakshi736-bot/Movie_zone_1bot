@@ -70,7 +70,6 @@ module.exports = function createApiRoutes(bot) {
             }
 
             // ⚡ सॉर्टिंग लॉजिक:
-            // "Latest" टैब में असली रिलीज़ डेट और साल के हिसाब से नई रिलीज़ सबसे ऊपर आएगी
             let sortOption = { updatedAt: -1 };
             if (category === 'Latest') {
                 sortOption = { releaseDate: -1, year: -1, updatedAt: -1 };
@@ -165,6 +164,7 @@ module.exports = function createApiRoutes(bot) {
         }
     });
 
+    // 📩 मिनी ऐप रिक्वेस्ट एंडपॉइंट (बटन्स के साथ)
     router.post('/request', async (req, res) => {
         try {
             const { userId, movieName, username, firstName } = req.body;
@@ -205,10 +205,26 @@ module.exports = function createApiRoutes(bot) {
             await user.save();
 
             const adminIds = process.env.ADMIN_ID ? process.env.ADMIN_ID.split(',').map(id => id.trim()) : [];
-            const requestText = `📩 <b>नई मूवी रिक्वेस्ट (Mini App)!</b>\n\n🎬 <b>मूवी:</b> ${movieName}\n👤 <b>यूज़र:</b> ${firstName || 'User'} (@${username || 'N/A'})\n🆔 <b>ID:</b> <code>${userId}</code>`;
+            const requestText = `📩 <b>नई मूवी रिक्वेस्ट (Mini App)!</b>\n\n` +
+                                `🎬 <b>मूवी:</b> <code>${movieName}</code>\n` +
+                                `👤 <b>यूज़र:</b> ${firstName || 'User'} (@${username || 'N/A'})\n` +
+                                `🆔 <b>ID:</b> <code>${userId}</code>`;
+
+            const reply_markup = {
+                inline_keyboard: [
+                    [
+                        { text: '✅ Uploaded', callback_data: `req_done_${userId}_${encodeURIComponent(movieName)}` },
+                        { text: '❌ Reject', callback_data: `req_rej_${userId}_${encodeURIComponent(movieName)}` }
+                    ]
+                ]
+            };
 
             for (const id of adminIds) {
-                await bot.sendMessage(id, requestText, { parse_mode: 'HTML' }).catch(() => {});
+                if (id) {
+                    await bot.sendMessage(id, requestText, { parse_mode: 'HTML', reply_markup }).catch((err) => {
+                        console.error(`[Admin Request Send Error - ${id}]:`, err.message);
+                    });
+                }
             }
 
             res.json({
