@@ -354,6 +354,61 @@ module.exports = function setupBotHandlers(bot) {
         }
     });
 
+    // 🧹 बल्क डुप्लिकेट क्लीनर कमांड (Duplicate Files Remover)
+    bot.onText(/\/dedup/, async (msg) => {
+        if (!isAdmin(msg.from.id)) return;
+        
+        await bot.sendMessage(msg.chat.id, '⏳ <b>डेटाबेस क्लीनिंग शुरू हो रही है...</b>\nकृपया कुछ सेकंड इंतज़ार करें।', { parse_mode: 'HTML' });
+
+        try {
+            const movies = await Movie.find();
+            let totalCleanedFiles = 0;
+            let updatedCards = 0;
+
+            for (const movie of movies) {
+                if (!movie.files || movie.files.length <= 1) continue;
+
+                const seenFiles = new Set();
+                const uniqueFiles = [];
+
+                for (const file of movie.files) {
+                    const isEpisode = /(s\d+|ep?\d+|part\s*\d+)/i.test(file.label || '');
+                    
+                    const uniqueKey = isEpisode 
+                        ? `${file.fileId}` 
+                        : `${file.label.replace(/\s*\[Option\s*\d+\]/i, '').trim()}_${file.fileSize || ''}`;
+
+                    if (!seenFiles.has(uniqueKey)) {
+                        seenFiles.add(uniqueKey);
+                        file.label = file.label.replace(/\s*\[Option\s*\d+\]/i, '').trim();
+                        uniqueFiles.push(file);
+                    } else {
+                        totalCleanedFiles++;
+                    }
+                }
+
+                if (uniqueFiles.length !== movie.files.length) {
+                    movie.files = uniqueFiles;
+                    movie.updatedAt = new Date();
+                    await movie.save();
+                    updatedCards++;
+                }
+            }
+
+            bot.sendMessage(
+                msg.chat.id,
+                `✅ <b>डेटाबेस क्लीनिंग पूरी हुई!</b>\n\n` +
+                `🗑️ हटाई गईं डुप्लिकेट फाइल्स: <b>${totalCleanedFiles}</b>\n` +
+                `🎬 सुधारे गए मूवी कार्ड्स: <b>${updatedCards}</b>\n\n` +
+                `डेटाबेस एकदम हल्का और व्यवस्थित हो चुका है!`,
+                { parse_mode: 'HTML' }
+            );
+        } catch (err) {
+            console.error('[Dedup Error]:', err);
+            bot.sendMessage(msg.chat.id, '❌ एरर: ' + err.message);
+        }
+    });
+
     // 🏷️ स्मार्ट रीनेम, साल और कस्टम पोस्टर सपोर्ट
     bot.onText(/\/rename (.+)/, async (msg, match) => {
         if (!isAdmin(msg.from.id)) return;
@@ -859,6 +914,32 @@ module.exports = function setupBotHandlers(bot) {
         const userId = msg.from ? msg.from.id.toString() : '';
         if (!isAdmin(userId)) return;
 
+        // 🖼️ फ़ोटो अपलोड करके डायरेक्ट पोस्टर अपडेट करना
+        if (msg.photo && msg.caption && msg.caption.startsWith('/setposter')) {
+            const movieTitle = msg.caption.replace('/setposter', '').trim();
+            if (!movieTitle) {
+                return bot.sendMessage(msg.chat.id, '⚠️ <b>तरीका:</b> फ़ोटो के कैप्शन में मूवी का नाम लिखें:\n<code>/setposter Movie Ka Naam</code>', { parse_mode: 'HTML' });
+            }
+
+            try {
+                const photoId = msg.photo[msg.photo.length - 1].file_id;
+                const fileObj = await bot.getFile(photoId);
+                const posterUrl = `https://api.telegram.org/file/bot${bot.token}/${fileObj.file_path}`;
+
+                const movie = await Movie.findOne({ title: new RegExp(`^${movieTitle}$`, 'i') });
+                if (!movie) {
+                    return bot.sendMessage(msg.chat.id, `❌ "${movieTitle}" नाम से कोई मूवी डेटाबेस में नहीं मिली।`);
+                }
+
+                movie.poster = posterUrl;
+                await movie.save();
+
+                return bot.sendMessage(msg.chat.id, `✅ <b>"${movie.title}"</b> का पोस्टर सफलतापूर्वक बदल दिया गया!`, { parse_mode: 'HTML' });
+            } catch (err) {
+                return bot.sendMessage(msg.chat.id, '❌ एरर: ' + err.message);
+            }
+        }
+
         if (msg.text && !msg.text.startsWith('/') && adminFileQueue[msg.chat.id] && adminFileQueue[msg.chat.id].length > 0) {
             const fileData = adminFileQueue[msg.chat.id].shift();
             const enteredTitle = msg.text.trim();
@@ -873,7 +954,6 @@ module.exports = function setupBotHandlers(bot) {
         }
 
         if (msg.text && msg.text.startsWith('/')) return;
-        if (msg.photo && msg.caption && msg.caption.startsWith('/setposter')) return;
 
         if (msg.video || msg.document) {
             await handleIncomingFile(msg, false);
