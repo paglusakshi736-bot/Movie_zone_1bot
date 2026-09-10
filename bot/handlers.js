@@ -684,10 +684,10 @@ module.exports = function setupBotHandlers(bot) {
         }
         // 📩 मूवी रिक्वेस्ट एक्शन्स (डायरेक्ट डीप लिंक के साथ)
         else if (data.startsWith('req_done_')) {
-            const parts = data.replace('req_done_', '').split('_');[span_2](start_span)[span_2](end_span)
-            const targetUserId = parts[0];[span_3](start_span)[span_3](end_span)
-            const requestedTitle = decodeURIComponent(parts.slice(1).join('_'));[span_4](start_span)[span_4](end_span)
-            const appUrl = process.env.RENDER_EXTERNAL_URL || 'https://movie-zone-1bot.onrender.com';[span_5](start_span)[span_5](end_span)
+            const parts = data.replace('req_done_', '').split('_');
+            const targetUserId = parts[0];
+            const requestedTitle = decodeURIComponent(parts.slice(1).join('_'));
+            const appUrl = process.env.RENDER_EXTERNAL_URL || 'https://movie-zone-1bot.onrender.com';
             const directMovieUrl = `${appUrl}?search=${encodeURIComponent(requestedTitle)}`;
 
             try {
@@ -695,7 +695,7 @@ module.exports = function setupBotHandlers(bot) {
                     targetUserId,
                     `🎉 <b>आपकी रिक्वेस्ट पूरी हो गई है!</b>\n\n🎬 मूवी/सीरीज़: <b>${requestedTitle}</b> अब स्टोर में उपलब्ध है।\n\n👇 नीचे क्लिक करके सीधे देखें:`,
                     {
-                        parse_mode: 'HTML',[span_6](start_span)[span_6](end_span)
+                        parse_mode: 'HTML',
                         reply_markup: {
                             inline_keyboard: [
                                 [{ text: `🚀 Open "${requestedTitle}"`, web_app: { url: directMovieUrl } }]
@@ -704,92 +704,92 @@ module.exports = function setupBotHandlers(bot) {
                     }
                 );
 
-                await bot.answerCallbackQuery(query.id, { text: "✅ यूज़र को डायरेक्ट लिंक भेज दिया गया!" });[span_7](start_span)[span_7](end_span)
+                await bot.answerCallbackQuery(query.id, { text: "✅ यूज़र को डायरेक्ट लिंक भेज दिया गया!" });
                 await bot.editMessageText(
                     `${query.message.text}\n\n✅ <b>स्टेटस:</b> अपलोड पूरा हुआ और यूज़र को डायरेक्ट लिंक भेजा गया।`,
-                    { chat_id: chatId, message_id: messageId, parse_mode: 'HTML' }[span_8](start_span)[span_8](end_span)
+                    { chat_id: chatId, message_id: messageId, parse_mode: 'HTML' }
                 );
             } catch (err) {
-                await bot.answerCallbackQuery(query.id, { text: "⚠️ यूज़र को मैसेज नहीं भेजा जा सका!" });[span_9](start_span)[span_9](end_span)
+                await bot.answerCallbackQuery(query.id, { text: "⚠️ यूज़र को मैसेज नहीं भेजा जा सका!" });
             }
         } else if (data.startsWith('req_rej_')) {
-            const parts = data.replace('req_rej_', '').split('_');[span_10](start_span)[span_10](end_span)
-            const targetUserId = parts[0];[span_11](start_span)[span_11](end_span)
-            const requestedTitle = decodeURIComponent(parts.slice(1).join('_'));[span_12](start_span)[span_12](end_span)
+            const parts = data.replace('req_rej_', '').split('_');
+            const targetUserId = parts[0];
+            const requestedTitle = decodeURIComponent(parts.slice(1).join('_'));
 
             try {
                 await bot.sendMessage(
                     targetUserId,
                     `⚠️ <b>माफ़ी चाहते हैं!</b>\n\nआपकी रिक्वेस्ट की गई सामग्री <b>"${requestedTitle}"</b> वर्तमान में उपलब्ध नहीं कराई जा सकी।`,
-                    { parse_mode: 'HTML' }[span_13](start_span)[span_13](end_span)
+                    { parse_mode: 'HTML' }
                 );
 
-                await bot.answerCallbackQuery(query.id, { text: "❌ रिक्वेस्ट रिजेक्ट कर दी गई!" });[span_14](start_span)[span_14](end_span)
+                await bot.answerCallbackQuery(query.id, { text: "❌ रिक्वेस्ट रिजेक्ट कर दी गई!" });
                 await bot.editMessageText(
                     `${query.message.text}\n\n❌ <b>स्टेटस:</b> रिजेक्ट कर दिया गया।`,
-                    { chat_id: chatId, message_id: messageId, parse_mode: 'HTML' }[span_15](start_span)[span_15](end_span)
+                    { chat_id: chatId, message_id: messageId, parse_mode: 'HTML' }
                 );
             } catch (err) {
-                await bot.answerCallbackQuery(query.id, { text: "एरर: " + err.message });[span_16](start_span)[span_16](end_span)
+                await bot.answerCallbackQuery(query.id, { text: "एरर: " + err.message });
             }
         }
     });
 
     bot.onText(/\/settimer\s+(\d+)/, async (msg, match) => {
-        if (!isAdmin(msg.from.id)) return;[span_17](start_span)[span_17](end_span)
-        const minutes = parseInt(match[1]);[span_18](start_span)[span_18](end_span)
-        if (minutes < 1) return bot.sendMessage(msg.chat.id, "⚠️ टाइमर कम से कम 1 मिनट होना चाहिए।");[span_19](start_span)[span_19](end_span)
+        if (!isAdmin(msg.from.id)) return;
+        const minutes = parseInt(match[1]);
+        if (minutes < 1) return bot.sendMessage(msg.chat.id, "⚠️ टाइमर कम से कम 1 मिनट होना चाहिए।");
 
         try {
-            await Config.findOneAndUpdate({ key: 'auto_delete_timer' }, { value: minutes }, { upsert: true });[span_20](start_span)[span_20](end_span)
-            bot.sendMessage(msg.chat.id, `⏱️ <b>ऑटो-डिलीट टाइमर सेट:</b> <code>${minutes} मिनट</code>`, { parse_mode: 'HTML' });[span_21](start_span)[span_21](end_span)
+            await Config.findOneAndUpdate({ key: 'auto_delete_timer' }, { value: minutes }, { upsert: true });
+            bot.sendMessage(msg.chat.id, `⏱️ <b>ऑटो-डिलीट टाइमर सेट:</b> <code>${minutes} मिनट</code>`, { parse_mode: 'HTML' });
         } catch (e) {
-            bot.sendMessage(msg.chat.id, "❌ एरर: " + e.message);[span_22](start_span)[span_22](end_span)
+            bot.sendMessage(msg.chat.id, "❌ एरर: " + e.message);
         }
     });
     
     bot.onText(/\/setbackup\s+(.+)/, async (msg, match) => {
-        if (!isAdmin(msg.from.id)) return;[span_23](start_span)[span_23](end_span)
-        const link = match[1].trim();[span_24](start_span)[span_24](end_span)
+        if (!isAdmin(msg.from.id)) return;
+        const link = match[1].trim();
         try {
-            await Config.findOneAndUpdate({ key: 'backup_channel_link' }, { value: link }, { upsert: true });[span_25](start_span)[span_25](end_span)
-            bot.sendMessage(msg.chat.id, `📢 <b>बैकअप चैनल लिंक सेट:</b> <code>${link}</code>`, { parse_mode: 'HTML' });[span_26](start_span)[span_26](end_span)
+            await Config.findOneAndUpdate({ key: 'backup_channel_link' }, { value: link }, { upsert: true });
+            bot.sendMessage(msg.chat.id, `📢 <b>बैकअप चैनल लिंक सेट:</b> <code>${link}</code>`, { parse_mode: 'HTML' });
         } catch (e) {
-            bot.sendMessage(msg.chat.id, "❌ एरर: " + e.message);[span_27](start_span)[span_27](end_span)
+            bot.sendMessage(msg.chat.id, "❌ एरर: " + e.message);
         }
     });
 
     // ⚡ साइलेंट व तेज़ डेटाबेस सेवर
     async function saveMovieToDB(bot, chatId, titleToUse, fileData) {
-        const { fileId, fileType, fileSize, thumbFileId, label, isSeries, isDubbed, detectedYear, isOther } = fileData;[span_28](start_span)[span_28](end_span)
+        const { fileId, fileType, fileSize, thumbFileId, label, isSeries, isDubbed, detectedYear, isOther } = fileData;
         try {
-            const tmdbData = await fetchTMDBData(titleToUse, detectedYear, isSeries);[span_29](start_span)[span_29](end_span)
-            const finalMovieTitle = tmdbData?.officialTitle || titleToUse;[span_30](start_span)[span_30](end_span)
-            let poster = tmdbData?.poster || null;[span_31](start_span)[span_31](end_span)
-            const rating = tmdbData?.rating || '8.0';[span_32](start_span)[span_32](end_span)
-            const year = tmdbData?.year || detectedYear || '2026';[span_33](start_span)[span_33](end_span)
-            const releaseDate = tmdbData?.releaseDate ? new Date(tmdbData.releaseDate) : null;[span_34](start_span)[span_34](end_span)
+            const tmdbData = await fetchTMDBData(titleToUse, detectedYear, isSeries);
+            const finalMovieTitle = tmdbData?.officialTitle || titleToUse;
+            let poster = tmdbData?.poster || null;
+            const rating = tmdbData?.rating || '8.0';
+            const year = tmdbData?.year || detectedYear || '2026';
+            const releaseDate = tmdbData?.releaseDate ? new Date(tmdbData.releaseDate) : null;
 
             if (!poster && thumbFileId) {
                 try {
-                    const fileObj = await bot.getFile(thumbFileId);[span_35](start_span)[span_35](end_span)
+                    const fileObj = await bot.getFile(thumbFileId);
                     if (fileObj && fileObj.file_path) {
-                        poster = `https://api.telegram.org/file/bot${bot.token}/${fileObj.file_path}`;[span_36](start_span)[span_36](end_span)
+                        poster = `https://api.telegram.org/file/bot${bot.token}/${fileObj.file_path}`;
                     }
                 } catch (e) {}
             }
 
-            let finalCategory = isOther ? 'Others' : (tmdbData?.category || (isSeries ? 'Web Series' : 'Movie'));[span_37](start_span)[span_37](end_span)
+            let finalCategory = isOther ? 'Others' : (tmdbData?.category || (isSeries ? 'Web Series' : 'Movie'));
             if (!isSeries && isDubbed && finalCategory !== 'Hindi' && !isOther) {
-                finalCategory = 'Hindi';[span_38](start_span)[span_38](end_span)
+                finalCategory = 'Hindi';
             }
 
-            let isEligible = false;[span_39](start_span)[span_39](end_span)
+            let isEligible = false;
             if (parseFloat(rating) >= 9.0) {
-                isEligible = true;[span_40](start_span)[span_40](end_span)
+                isEligible = true;
             } else if (releaseDate) {
-                const diffDays = Math.floor((new Date() - releaseDate) / (1000 * 60 * 60 * 24));[span_41](start_span)[span_41](end_span)
-                if (diffDays >= 0 && diffDays <= 30) isEligible = true;[span_42](start_span)[span_42](end_span)
+                const diffDays = Math.floor((new Date() - releaseDate) / (1000 * 60 * 60 * 24));
+                if (diffDays >= 0 && diffDays <= 30) isEligible = true;
             }
 
             let movie = await Movie.findOne({ 
@@ -797,26 +797,26 @@ module.exports = function setupBotHandlers(bot) {
                     { title: new RegExp(`^${titleToUse}$`, 'i') },
                     { title: new RegExp(`^${finalMovieTitle}$`, 'i') }
                 ]
-            });[span_43](start_span)[span_43](end_span)
+            });
 
-            let finalLabel = label;[span_44](start_span)[span_44](end_span)
-            if (fileSize) finalLabel += ` (${fileSize})`;[span_45](start_span)[span_45](end_span)
+            let finalLabel = label;
+            if (fileSize) finalLabel += ` (${fileSize})`;
 
             if (movie) {
-                const countSameLabel = movie.files.filter(f => f.label.startsWith(label)).length;[span_46](start_span)[span_46](end_span)
-                if (countSameLabel > 0) finalLabel += ` [Option ${countSameLabel + 1}]`;[span_47](start_span)[span_47](end_span)
+                const countSameLabel = movie.files.filter(f => f.label.startsWith(label)).length;
+                if (countSameLabel > 0) finalLabel += ` [Option ${countSameLabel + 1}]`;
 
-                movie.files.push({ label: finalLabel, fileId, fileType, fileSize });[span_48](start_span)[span_48](end_span)
-                if (thumbFileId && !movie.thumbFileId) movie.thumbFileId = thumbFileId;[span_49](start_span)[span_49](end_span)
-                if (poster && (!movie.poster || movie.poster.includes('placehold.co'))) movie.poster = poster;[span_50](start_span)[span_50](end_span)
+                movie.files.push({ label: finalLabel, fileId, fileType, fileSize });
+                if (thumbFileId && !movie.thumbFileId) movie.thumbFileId = thumbFileId;
+                if (poster && (!movie.poster || movie.poster.includes('placehold.co'))) movie.poster = poster;
                 if (isEligible && movie.broadcastStatus !== 'sent') {
-                    movie.broadcastStatus = 'pending';[span_51](start_span)[span_51](end_span)
-                    movie.isEligibleForBroadcast = true;[span_52](start_span)[span_52](end_span)
+                    movie.broadcastStatus = 'pending';
+                    movie.isEligibleForBroadcast = true;
                 }
-                movie.updatedAt = new Date();[span_53](start_span)[span_53](end_span)
-                await movie.save();[span_54](start_span)[span_54](end_span)
+                movie.updatedAt = new Date();
+                await movie.save();
 
-                console.log(`[Auto-Merged]: ${movie.title} -> ${finalLabel}`);[span_55](start_span)[span_55](end_span)
+                console.log(`[Auto-Merged]: ${movie.title} -> ${finalLabel}`);
             } else {
                 movie = new Movie({
                     title: finalMovieTitle,
@@ -829,92 +829,92 @@ module.exports = function setupBotHandlers(bot) {
                     broadcastStatus: isEligible ? 'pending' : 'ignored',
                     isEligibleForBroadcast: isEligible,
                     files: [{ label: finalLabel, fileId, fileType, fileSize }]
-                });[span_56](start_span)[span_56](end_span)
-                await movie.save();[span_57](start_span)[span_57](end_span)
+                });
+                await movie.save();
 
-                console.log(`[Created]: ${finalMovieTitle} -> ${finalCategory}`);[span_58](start_span)[span_58](end_span)
+                console.log(`[Created]: ${finalMovieTitle} -> ${finalCategory}`);
             }
 
-            bulkProcessedCount++;[span_59](start_span)[span_59](end_span)
+            bulkProcessedCount++;
             if (bulkProcessedCount % 100 === 0 && chatId) {
                 bot.sendMessage(
                     chatId,
                     `📊 <b>[बल्क अपलोड स्टेटस]:</b> कुल <b>${bulkProcessedCount}</b> फ़ाइलें सफलतापूर्वक प्रोसेस और सेव हो चुकी हैं!`,
-                    { parse_mode: 'HTML' }[span_60](start_span)[span_60](end_span)
+                    { parse_mode: 'HTML' }
                 ).catch(() => {});
             }
 
-            if (bulkNotificationTimer) clearTimeout(bulkNotificationTimer);[span_61](start_span)[span_61](end_span)
+            if (bulkNotificationTimer) clearTimeout(bulkNotificationTimer);
             bulkNotificationTimer = setTimeout(async () => {
                 try {
-                    const totalMovies = await Movie.countDocuments();[span_62](start_span)[span_62](end_span)
+                    const totalMovies = await Movie.countDocuments();
                     if (chatId) {
                         bot.sendMessage(
                             chatId,
                             `🎉 <b>बल्क अपलोड पूरा हुआ!</b>\n\n📥 हाल में प्रोसेस की गईं फ़ाइलें: <b>${bulkProcessedCount}</b>\n🎬 डेटाबेस में कुल कार्ड्स: <b>${totalMovies}</b>`,
-                            { parse_mode: 'HTML' }[span_63](start_span)[span_63](end_span)
+                            { parse_mode: 'HTML' }
                         ).catch(() => {});
                     }
-                    bulkProcessedCount = 0;[span_64](start_span)[span_64](end_span)
+                    bulkProcessedCount = 0;
                 } catch (e) {}
-            }, 5000);[span_65](start_span)[span_65](end_span)
+            }, 5000);
 
         } catch (err) {
-            console.error('[DB Save Error]:', err.message);[span_66](start_span)[span_66](end_span)
+            console.error('[DB Save Error]:', err.message);
         }
     }
 
     // ⚡ साझा मीडिया हैंडलर
     async function handleIncomingFile(msg, isChannel = false) {
-        const file = msg.video || msg.document;[span_67](start_span)[span_67](end_span)
-        if (!file) return;[span_68](start_span)[span_68](end_span)
+        const file = msg.video || msg.document;
+        if (!file) return;
 
         uploadQueue = uploadQueue.then(async () => {
-            let rawInput = msg.caption || file.file_name || '';[span_69](start_span)[span_69](end_span)
+            let rawInput = msg.caption || file.file_name || '';
 
             if (!rawInput && file.file_id) {
                 try {
-                    const fileInfo = await bot.getFile(file.file_id);[span_70](start_span)[span_70](end_span)
+                    const fileInfo = await bot.getFile(file.file_id);
                     if (fileInfo && fileInfo.file_path) {
-                        const extracted = fileInfo.file_path.split('/').pop().replace(/\.[^/.]+$/, "");[span_71](start_span)[span_71](end_span)
+                        const extracted = fileInfo.file_path.split('/').pop().replace(/\.[^/.]+$/, "");
                         if (!extracted.startsWith('file_')) {
-                            rawInput = extracted;[span_72](start_span)[span_72](end_span)
+                            rawInput = extracted;
                         }
                     }
                 } catch (e) {}
             }
 
-            const { cleanTitle, label, isSeries, isDubbed, detectedYear, isOther } = parseMediaInfo(rawInput);[span_73](start_span)[span_73](end_span)
-            const fileId = file.file_id;[span_74](start_span)[span_74](end_span)
-            const fileType = msg.video ? 'video' : 'document';[span_75](start_span)[span_75](end_span)
-            const fileSize = formatBytes(file.file_size);[span_76](start_span)[span_76](end_span)
-            let thumbFileId = file.thumbnail ? file.thumbnail.file_id : null;[span_77](start_span)[span_77](end_span)
+            const { cleanTitle, label, isSeries, isDubbed, detectedYear, isOther } = parseMediaInfo(rawInput);
+            const fileId = file.file_id;
+            const fileType = msg.video ? 'video' : 'document';
+            const fileSize = formatBytes(file.file_size);
+            let thumbFileId = file.thumbnail ? file.thumbnail.file_id : null;
 
-            const fileData = { fileId, fileType, fileSize, thumbFileId, label, isSeries, isDubbed, detectedYear, isOther };[span_78](start_span)[span_78](end_span)
+            const fileData = { fileId, fileType, fileSize, thumbFileId, label, isSeries, isDubbed, detectedYear, isOther };
 
-            const notifyChatId = isChannel ? (ADMIN_ID ? ADMIN_ID.split(',')[0].trim() : null) : msg.chat.id;[span_79](start_span)[span_79](end_span)
+            const notifyChatId = isChannel ? (ADMIN_ID ? ADMIN_ID.split(',')[0].trim() : null) : msg.chat.id;
 
             if (!cleanTitle) {
                 if (!isChannel) {
-                    if (!adminFileQueue[msg.chat.id]) adminFileQueue[msg.chat.id] = [];[span_80](start_span)[span_80](end_span)
-                    adminFileQueue[msg.chat.id].push(fileData);[span_81](start_span)[span_81](end_span)
+                    if (!adminFileQueue[msg.chat.id]) adminFileQueue[msg.chat.id] = [];
+                    adminFileQueue[msg.chat.id].push(fileData);
                     
                     if (adminFileQueue[msg.chat.id].length === 1) {
-                        await processNextPendingFile(bot, msg.chat.id);[span_82](start_span)[span_82](end_span)
+                        await processNextPendingFile(bot, msg.chat.id);
                     }
                 }
-                return;[span_83](start_span)[span_83](end_span)
+                return;
             }
 
-            await saveMovieToDB(bot, notifyChatId, cleanTitle, fileData);[span_84](start_span)[span_84](end_span)
-            await new Promise(r => setTimeout(r, 120));[span_85](start_span)[span_85](end_span)
+            await saveMovieToDB(bot, notifyChatId, cleanTitle, fileData);
+            await new Promise(r => setTimeout(r, 120));
         });
     }
 
     // 📢 1. चैनल पोस्ट लिसनर
     bot.on('channel_post', async (msg) => {
         if (msg.document || msg.video) {
-            await handleIncomingFile(msg, true);[span_86](start_span)[span_86](end_span)
+            await handleIncomingFile(msg, true);
         }
     });
 
@@ -922,20 +922,20 @@ module.exports = function setupBotHandlers(bot) {
     bot.on('message', async (msg) => {
         if (msg.chat && (msg.chat.type === 'group' || msg.chat.type === 'supergroup')) {
             if (msg.text && !msg.text.startsWith('/')) {
-                const queryText = msg.text.trim();[span_87](start_span)[span_87](end_span)
+                const queryText = msg.text.trim();
                 if (queryText.length > 3 && !msg.from.is_bot) {
-                    const matchedMovie = await Movie.findOne({ title: new RegExp(queryText, 'i') });[span_88](start_span)[span_88](end_span)
+                    const matchedMovie = await Movie.findOne({ title: new RegExp(queryText, 'i') });
                     if (matchedMovie) {
-                        const appUrl = process.env.RENDER_EXTERNAL_URL || 'https://movie-zone-1bot.onrender.com';[span_89](start_span)[span_89](end_span)
+                        const appUrl = process.env.RENDER_EXTERNAL_URL || 'https://movie-zone-1bot.onrender.com';
                         bot.sendMessage(
                             msg.chat.id,
                             `🍿 <b>"${matchedMovie.title}"</b> हमारे स्टोर में उपलब्ध है!\n\n👇 नीचे क्लिक करके तुरंत देखें:`,
                             {
-                                reply_to_message_id: msg.message_id,[span_90](start_span)[span_90](end_span)
-                                parse_mode: 'HTML',[span_91](start_span)[span_91](end_span)
+                                reply_to_message_id: msg.message_id,
+                                parse_mode: 'HTML',
                                 reply_markup: {
                                     inline_keyboard: [
-                                        [{ text: '🚀 Open Mini App', web_app: { url: appUrl } }][span_92](start_span)[span_92](end_span)
+                                        [{ text: '🚀 Open Mini App', web_app: { url: appUrl } }]
                                     ]
                                 }
                             }
@@ -943,55 +943,55 @@ module.exports = function setupBotHandlers(bot) {
                     }
                 }
             }
-            return;[span_93](start_span)[span_93](end_span)
+            return;
         }
 
-        const userId = msg.from ? msg.from.id.toString() : '';[span_94](start_span)[span_94](end_span)
-        if (!isAdmin(userId)) return;[span_95](start_span)[span_95](end_span)
+        const userId = msg.from ? msg.from.id.toString() : '';
+        if (!isAdmin(userId)) return;
 
         // 🖼️ फ़ोटो अपलोड करके डायरेक्ट पोस्टर अपडेट करना
         if (msg.photo && msg.caption && msg.caption.startsWith('/setposter')) {
-            const movieTitle = msg.caption.replace('/setposter', '').trim();[span_96](start_span)[span_96](end_span)
+            const movieTitle = msg.caption.replace('/setposter', '').trim();
             if (!movieTitle) {
-                return bot.sendMessage(msg.chat.id, '⚠️ <b>तरीका:</b> फ़ोटो के कैप्शन में मूवी का नाम लिखें:\n<code>/setposter Movie Ka Naam</code>', { parse_mode: 'HTML' });[span_97](start_span)[span_97](end_span)
+                return bot.sendMessage(msg.chat.id, '⚠️ <b>तरीका:</b> फ़ोटो के कैप्शन में मूवी का नाम लिखें:\n<code>/setposter Movie Ka Naam</code>', { parse_mode: 'HTML' });
             }
 
             try {
-                const photoId = msg.photo[msg.photo.length - 1].file_id;[span_98](start_span)[span_98](end_span)
-                const fileObj = await bot.getFile(photoId);[span_99](start_span)[span_99](end_span)
-                const posterUrl = `https://api.telegram.org/file/bot${bot.token}/${fileObj.file_path}`;[span_100](start_span)[span_100](end_span)
+                const photoId = msg.photo[msg.photo.length - 1].file_id;
+                const fileObj = await bot.getFile(photoId);
+                const posterUrl = `https://api.telegram.org/file/bot${bot.token}/${fileObj.file_path}`;
 
-                const movie = await Movie.findOne({ title: new RegExp(`^${movieTitle}$`, 'i') });[span_101](start_span)[span_101](end_span)
+                const movie = await Movie.findOne({ title: new RegExp(`^${movieTitle}$`, 'i') });
                 if (!movie) {
-                    return bot.sendMessage(msg.chat.id, `❌ "${movieTitle}" नाम से कोई मूवी डेटाबेस में नहीं मिली।`);[span_102](start_span)[span_102](end_span)
+                    return bot.sendMessage(msg.chat.id, `❌ "${movieTitle}" नाम से कोई मूवी डेटाबेस में नहीं मिली।`);
                 }
 
-                movie.poster = posterUrl;[span_103](start_span)[span_103](end_span)
-                await movie.save();[span_104](start_span)[span_104](end_span)
+                movie.poster = posterUrl;
+                await movie.save();
 
-                return bot.sendMessage(msg.chat.id, `✅ <b>"${movie.title}"</b> का पोस्टर सफलतापूर्वक बदल दिया गया!`, { parse_mode: 'HTML' });[span_105](start_span)[span_105](end_span)
+                return bot.sendMessage(msg.chat.id, `✅ <b>"${movie.title}"</b> का पोस्टर सफलतापूर्वक बदल दिया गया!`, { parse_mode: 'HTML' });
             } catch (err) {
-                return bot.sendMessage(msg.chat.id, '❌ एरर: ' + err.message);[span_106](start_span)[span_106](end_span)
+                return bot.sendMessage(msg.chat.id, '❌ एरर: ' + err.message);
             }
         }
 
         if (msg.text && !msg.text.startsWith('/') && adminFileQueue[msg.chat.id] && adminFileQueue[msg.chat.id].length > 0) {
-            const fileData = adminFileQueue[msg.chat.id].shift();[span_107](start_span)[span_107](end_span)
-            const enteredTitle = msg.text.trim();[span_108](start_span)[span_108](end_span)
+            const fileData = adminFileQueue[msg.chat.id].shift();
+            const enteredTitle = msg.text.trim();
             
             uploadQueue = uploadQueue.then(async () => {
-                await saveMovieToDB(bot, msg.chat.id, enteredTitle, fileData);[span_109](start_span)[span_109](end_span)
+                await saveMovieToDB(bot, msg.chat.id, enteredTitle, fileData);
                 if (adminFileQueue[msg.chat.id] && adminFileQueue[msg.chat.id].length > 0) {
-                    await processNextPendingFile(bot, msg.chat.id);[span_110](start_span)[span_110](end_span)
+                    await processNextPendingFile(bot, msg.chat.id);
                 }
             });
-            return;[span_111](start_span)[span_111](end_span)
+            return;
         }
 
-        if (msg.text && msg.text.startsWith('/')) return;[span_112](start_span)[span_112](end_span)
+        if (msg.text && msg.text.startsWith('/')) return;
 
         if (msg.video || msg.document) {
-            await handleIncomingFile(msg, false);[span_113](start_span)[span_113](end_span)
+            await handleIncomingFile(msg, false);
         }
     });
 };
