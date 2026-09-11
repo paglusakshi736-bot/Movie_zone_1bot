@@ -3,7 +3,7 @@ const { parseMediaInfo, formatBytes, fetchTMDBData } = require('./cleaner');
 
 const ADMIN_ID = process.env.ADMIN_ID;
 const ADMIN_GROUP_ID = process.env.ADMIN_GROUP_ID;
-const UPDATE_CHANNEL_ID = '@Moviezoneupdate';
+const UPDATE_CHANNEL_ID = process.env.UPDATE_CHANNEL_ID || '-1003941966692';
 const UPDATE_CHANNEL_LINK = 'https://t.me/Moviezoneupdate';
 const DISCUSS_GROUP_LINK = 'https://t.me/+DBD_fVL-Z5QwZWFl';
 
@@ -137,7 +137,7 @@ async function renderBroadcastDigest(bot, chatId, messageId = null) {
 }
 
 module.exports = function setupBotHandlers(bot) {
-    // 1. Start Command with Referral Tracking & Channel/Group Buttons
+    // 1. Start Command with Referral Tracking, Direct File Delivery & Search Link
     bot.onText(/\/start(?:\s+(.+))?/, async (msg, match) => {
         try {
             const currentUserId = msg.from.id.toString();
@@ -175,6 +175,7 @@ module.exports = function setupBotHandlers(bot) {
                 await user.save();
             }
 
+            // फ़ाइल ID डायरेक्ट डाउनलोड
             if (payload && payload.startsWith('file_')) {
                 const fileId = payload.replace('file_', '');
 
@@ -200,6 +201,49 @@ module.exports = function setupBotHandlers(bot) {
                 }, deleteMinutes * 60 * 1000);
 
                 return;
+            }
+
+            // ⚡ चैनल बटन से डायरेक्ट मूवी फ़ाइल भेजना (बिना मिनी ऐप खोले)
+            if (payload && payload.startsWith('search_')) {
+                const requestedTitle = decodeURIComponent(payload.replace('search_', ''));
+                const movie = await Movie.findOne({ title: new RegExp(`^${requestedTitle}$`, 'i') });
+
+                if (movie && movie.files && movie.files.length > 0) {
+                    const timerConfig = await Config.findOne({ key: 'auto_delete_timer' });
+                    const deleteMinutes = (timerConfig && timerConfig.value) ? parseInt(timerConfig.value) : 10;
+                    const backupConfig = await Config.findOne({ key: 'backup_channel_link' });
+                    const backupLink = (backupConfig && backupConfig.value) ? backupConfig.value : 'https://t.me/Moviezoneupdate';
+
+                    bot.sendMessage(msg.chat.id, `🎬 <b>"${movie.title}"</b> की फ़ाइलें भेजी जा रही हैं...`, { parse_mode: 'HTML' });
+
+                    for (const f of movie.files) {
+                        const caption = `🎬 <b>मूवी:</b> <a href="${backupLink}">${movie.title} (${movie.year || '2026'})</a>\n` +
+                                        `📦 <b>क्वालिटी:</b> ${f.label || 'HD'}\n` +
+                                        `📢 <b>अपडेट्स:</b> @Moviezoneupdate\n\n` +
+                                        `⚠️ <i>यह फ़ाइल ${deleteMinutes} मिनट में डिलीट हो जाएगी, इसे तुरंत Saved Messages में फॉरवर्ड कर लें।</i>\n` +
+                                        `💬 <i>कोई समस्या है? हमारे ग्रुप में बताएं।</i>`;
+
+                        const sendMethod = f.fileType === 'video' ? 'sendVideo' : 'sendDocument';
+                        const sentMsg = await bot[sendMethod](msg.chat.id, f.fileId, {
+                            caption: caption,
+                            parse_mode: 'HTML',
+                            reply_markup: {
+                                inline_keyboard: [
+                                    [{ text: '💬 Discussion Group', url: DISCUSS_GROUP_LINK }]
+                                ]
+                            }
+                        });
+
+                        setTimeout(async () => {
+                            try {
+                                await bot.deleteMessage(msg.chat.id, sentMsg.message_id);
+                            } catch (err) {}
+                        }, deleteMinutes * 60 * 1000);
+                    }
+                    return;
+                } else {
+                    return bot.sendMessage(msg.chat.id, `❌ <b>"${requestedTitle}"</b> की फ़ाइल उपलब्ध नहीं है।`, { parse_mode: 'HTML' });
+                }
             }
             
             const appUrl = process.env.RENDER_EXTERNAL_URL || 'https://movie-zone-1bot.onrender.com';
@@ -578,7 +622,7 @@ module.exports = function setupBotHandlers(bot) {
             await bot.answerCallbackQuery(query.id);
         }
 
-        // 📢 Broadcast Panel Callbacks (सभी मूवीज़ के अलग-अलग पोस्टर्स)
+        // 📢 Broadcast Panel Callbacks (चैनल के लिए URL बटन, पर्सनल के लिए फ़ाइल लिंक)
         else if (data.startsWith('b_toggle_')) {
             const movieId = data.replace('b_toggle_', '');
             if (!adminBroadcastSessions[chatId]) {
@@ -608,23 +652,23 @@ module.exports = function setupBotHandlers(bot) {
             if (moviesToBroadcast.length === 0) return bot.answerCallbackQuery(query.id, { text: "मूवीज़ नहीं मिलीं!" });
 
             await bot.answerCallbackQuery(query.id, { text: "🚀 ब्रॉडकास्ट शुरू हो रहा है..." });
-            await bot.editMessageText("⏳ <b>सभी मूवीज़ के अलग-अलग पोस्टर्स भेजे जा रहे हैं...</b> कृपया इंतज़ार करें।", { chat_id: chatId, message_id: messageId, parse_mode: 'HTML' });
+            await bot.editMessageText("⏳ <b>सभी मूवीज़ के पोस्टर्स और डायरेक्ट डाउनलोड लिंक्स भेजे जा रहे हैं...</b> कृपया इंतज़ार करें।", { chat_id: chatId, message_id: messageId, parse_mode: 'HTML' });
 
-            const appUrl = process.env.RENDER_EXTERNAL_URL || 'https://movie-zone-1bot.onrender.com';
+            const botInfo = await bot.getMe();
             const users = await User.find({ isBlocked: { $ne: true } });
 
-            // 1. सबसे पहले Update Channel में सभी मूवीज़ एक-एक करके भेजें
+            // 1. सबसे पहले Update Channel में सभी मूवीज़ एक-एक करके भेजें (केवल URL बटन)
             for (const m of moviesToBroadcast) {
-                const directMovieUrl = `${appUrl}?search=${encodeURIComponent(m.title)}`;
+                const directFileLink = `https://t.me/${botInfo.username}?start=search_${encodeURIComponent(m.title)}`;
                 const cardCaption = `🎬 <b>${m.title}</b> (${m.year || '2026'})\n\n` +
                                     `⭐ <b>रेटिंग:</b> ${m.rating || '8.0'}/10\n` +
                                     `🏷️ <b>कैटेगरी:</b> ${m.category}\n` +
                                     `📂 <b>उपलब्ध क्वालिटीज़:</b> ${m.files ? m.files.length : 1} फ़ाइल्स\n\n` +
-                                    `👇 <i>नीचे क्लिक करके तुरंत देखें:</i>`;
+                                    `👇 <i>सीधे फ़ाइल पाने के लिए नीचे डाउनलोड बटन दबाएं:</i>`;
 
-                const reply_markup = {
+                const channel_reply_markup = {
                     inline_keyboard: [
-                        [{ text: `🚀 Open "${m.title}"`, web_app: { url: directMovieUrl } }],
+                        [{ text: `📥 Download "${m.title}"`, url: directFileLink }],
                         [{ text: '💬 Discussion Group', url: DISCUSS_GROUP_LINK }]
                     ]
                 };
@@ -633,14 +677,14 @@ module.exports = function setupBotHandlers(bot) {
 
                 try {
                     if (hasValidPoster) {
-                        await bot.sendPhoto(UPDATE_CHANNEL_ID, m.poster, { caption: cardCaption, parse_mode: 'HTML', reply_markup });
+                        await bot.sendPhoto(UPDATE_CHANNEL_ID, m.poster, { caption: cardCaption, parse_mode: 'HTML', reply_markup: channel_reply_markup });
                     } else {
-                        await bot.sendMessage(UPDATE_CHANNEL_ID, cardCaption, { parse_mode: 'HTML', reply_markup });
+                        await bot.sendMessage(UPDATE_CHANNEL_ID, cardCaption, { parse_mode: 'HTML', reply_markup: channel_reply_markup });
                     }
                 } catch (err) {
                     console.error(`[Channel Post Error - ${m.title}]:`, err.message);
                 }
-                await new Promise(r => setTimeout(r, 200));
+                await new Promise(r => setTimeout(r, 250));
             }
 
             // 2. फिर सभी यूज़र्स को पर्सनल DM में भेजें
@@ -648,24 +692,24 @@ module.exports = function setupBotHandlers(bot) {
             for (const u of users) {
                 try {
                     for (const m of moviesToBroadcast) {
-                        const directMovieUrl = `${appUrl}?search=${encodeURIComponent(m.title)}`;
-                        const cardCaption = `🎬 <b>${m.title}</b> (${m.year || '2026'})\n\n` +
+                        const directFileLink = `https://t.me/${botInfo.username}?start=search_${encodeURIComponent(m.title)}`;
+                        const userCaption = `🎬 <b>${m.title}</b> (${m.year || '2026'})\n\n` +
                                             `⭐ <b>रेटिंग:</b> ${m.rating || '8.0'}/10\n` +
                                             `🏷️ <b>कैटेगरी:</b> ${m.category}\n\n` +
-                                            `👇 <i>नीचे क्लिक करके सीधे डाउनलोड करें:</i>`;
+                                            `👇 <i>सीधे फ़ाइल पाने के लिए नीचे डाउनलोड बटन दबाएं:</i>`;
 
-                        const reply_markup = {
+                        const user_reply_markup = {
                             inline_keyboard: [
-                                [{ text: `🚀 Open "${m.title}"`, web_app: { url: directMovieUrl } }]
+                                [{ text: `📥 Download "${m.title}"`, url: directFileLink }]
                             ]
                         };
 
                         const hasValidPoster = m.poster && !m.poster.includes('placehold.co');
 
                         if (hasValidPoster) {
-                            await bot.sendPhoto(u.userId, m.poster, { caption: cardCaption, parse_mode: 'HTML', reply_markup });
+                            await bot.sendPhoto(u.userId, m.poster, { caption: userCaption, parse_mode: 'HTML', reply_markup: user_reply_markup });
                         } else {
-                            await bot.sendMessage(u.userId, cardCaption, { parse_mode: 'HTML', reply_markup });
+                            await bot.sendMessage(u.userId, userCaption, { parse_mode: 'HTML', reply_markup: user_reply_markup });
                         }
                         await new Promise(r => setTimeout(r, 100));
                     }
@@ -682,31 +726,31 @@ module.exports = function setupBotHandlers(bot) {
 
             await bot.sendMessage(chatId, `✅ <b>ब्रॉडकास्ट पूरा हुआ!</b>\n📢 कुल <b>${moviesToBroadcast.length}</b> मूवीज़ के अलग-अलग पोस्टर्स चैनल में शेयर हो गए!\n👥 यूज़र्स को डिलीवर: <b>${success}/${users.length}</b>`, { parse_mode: 'HTML' });
         }
-        // 📩 मूवी रिक्वेस्ट एक्शन्स (डायरेक्ट डीप लिंक के साथ)
+        // 📩 मूवी रिक्वेस्ट एक्शन्स (डायरेक्ट फ़ाइल डीप लिंक के साथ)
         else if (data.startsWith('req_done_')) {
             const parts = data.replace('req_done_', '').split('_');
             const targetUserId = parts[0];
             const requestedTitle = decodeURIComponent(parts.slice(1).join('_'));
-            const appUrl = process.env.RENDER_EXTERNAL_URL || 'https://movie-zone-1bot.onrender.com';
-            const directMovieUrl = `${appUrl}?search=${encodeURIComponent(requestedTitle)}`;
+            const botInfo = await bot.getMe();
+            const directFileLink = `https://t.me/${botInfo.username}?start=search_${encodeURIComponent(requestedTitle)}`;
 
             try {
                 await bot.sendMessage(
                     targetUserId,
-                    `🎉 <b>आपकी रिक्वेस्ट पूरी हो गई है!</b>\n\n🎬 मूवी/सीरीज़: <b>${requestedTitle}</b> अब स्टोर में उपलब्ध है।\n\n👇 नीचे क्लिक करके सीधे देखें:`,
+                    `🎉 <b>आपकी रिक्वेस्ट पूरी हो गई है!</b>\n\n🎬 मूवी/सीरीज़: <b>${requestedTitle}</b> अब स्टोर में उपलब्ध है।\n\n👇 नीचे क्लिक करके तुरंत फ़ाइल प्राप्त करें:`,
                     {
                         parse_mode: 'HTML',
                         reply_markup: {
                             inline_keyboard: [
-                                [{ text: `🚀 Open "${requestedTitle}"`, web_app: { url: directMovieUrl } }]
+                                [{ text: `📥 Download "${requestedTitle}"`, url: directFileLink }]
                             ]
                         }
                     }
                 );
 
-                await bot.answerCallbackQuery(query.id, { text: "✅ यूज़र को डायरेक्ट लिंक भेज दिया गया!" });
+                await bot.answerCallbackQuery(query.id, { text: "✅ यूज़र को डायरेक्ट डाउनलोड लिंक भेज दिया गया!" });
                 await bot.editMessageText(
-                    `${query.message.text}\n\n✅ <b>स्टेटस:</b> अपलोड पूरा हुआ और यूज़र को डायरेक्ट लिंक भेजा गया।`,
+                    `${query.message.text}\n\n✅ <b>स्टेटस:</b> अपलोड पूरा हुआ और यूज़र को डायरेक्ट डाउनलोड लिंक भेजा गया।`,
                     { chat_id: chatId, message_id: messageId, parse_mode: 'HTML' }
                 );
             } catch (err) {
